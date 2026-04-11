@@ -4,6 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 import * as Joi from 'joi';
 import { DatabaseModule } from './infrastructure/drizzle/drizzle.module';
 import { ScraperModule } from './modules/scraper/scraper.module';
+import { ArtistsModule } from './modules/artists/artists.module';
+import { DiscoveryModule } from './modules/discovery/discovery.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { ScraperModule } from './modules/scraper/scraper.module';
       },
     }),
     ScraperModule,
+    ArtistsModule,
+    DiscoveryModule,
   ],
 })
 export class AppModule {}

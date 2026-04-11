@@ -11,5 +11,10 @@ import { SpotifyMetadataService } from './services/spotify-metadata.service';
     KworbTotalsService,
     SpotifyMetadataService,
   ],
+  exports: [
+    KworbArtistDiscoveryService,
+    KworbTotalsService,
+    SpotifyMetadataService,
+  ],
 })
 export class ScraperModule {}

@@ -37,6 +37,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-fastify": "^11.1.17",
     "@nestjs/platform-socket.io": "^11.1.17",
+    "@nestjs/schedule": "^6.1.1",
     "@nestjs/websockets": "^11.1.17",
     "axios": "^1.15.0",
     "bcryptjs": "^3.0.3",
@@ -55,6 +56,7 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.10.0",
     "rxjs": "^7.8.1",
+    "slugify": "^1.6.9",
     "socket.io": "^4.8.3",
     "uuidv7": "^1.2.1"
   },
