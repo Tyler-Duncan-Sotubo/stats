@@ -242,6 +242,12 @@ export const certifications = pgTable(
     index('certs_song_territory_idx').on(t.songId, t.territory),
     index('certs_territory_level_idx').on(t.territory, t.level),
     index('certs_certified_at_idx').on(t.certifiedAt),
+    uniqueIndex('certs_artist_territory_body_level_idx').on(
+      t.artistId,
+      t.territory,
+      t.body,
+      t.level,
+    ),
   ],
 );
 

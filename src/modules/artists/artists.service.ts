@@ -1,27 +1,10 @@
-// src/modules/artists/artists.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ArtistsRepository } from './artists.repository';
 import { SpotifyMetadataService } from '../scraper/services/spotify-metadata.service';
 import { DiscoveredArtist } from '../scraper/services/kworb-artist-discovery.service';
 import slugify from 'slugify';
-
-const AFROBEATS_GENRES = new Set([
-  'afrobeats',
-  'afropop',
-  'afro pop',
-  'nigerian pop',
-  'ghanaian pop',
-  'afro r&b',
-  'alte',
-  'naija',
-  'afroswing',
-  'afro dancehall',
-  'east african pop',
-  'bongo flava',
-  'afro soul',
-  'south african pop',
-  'amapiano',
-]);
+import { CreateArtistInput } from './inputs/create-artist.input';
+import { UpdateArtistInput } from './inputs/update-artist.input';
 
 @Injectable()
 export class ArtistsService {
@@ -32,11 +15,7 @@ export class ArtistsService {
     private readonly spotifyMetadata: SpotifyMetadataService,
   ) {}
 
-  // ── Called by the discovery cron ─────────────────────────────────────
-  // Seeds new artists from chart discovery, skips ones already in DB,
-  // then immediately enriches new ones with Spotify metadata.
-
-  // artists.service.ts
+  // ── Discovery pipeline ────────────────────────────────────────────────
 
   async seedFromDiscovery(discovered: DiscoveredArtist[]): Promise<void> {
     if (!discovered.length) return;
@@ -53,7 +32,6 @@ export class ArtistsService {
       return;
     }
 
-    // Step 1: persist immediately with just what Kworb gave us
     const rows = newArtists.map((a) => ({
       name: a.name,
       spotifyId: a.spotifyId,
@@ -64,7 +42,6 @@ export class ArtistsService {
     this.logger.log(`Seeded ${rows.length} new artists from discovery`);
   }
 
-  // Called by seedFromDiscovery opportunistically AND by its own cron
   async enrichUnenriched(limit = 100): Promise<void> {
     const unenriched = await this.artistsRepository.findUnenriched(limit);
 
@@ -76,10 +53,6 @@ export class ArtistsService {
     this.logger.log(`Enriching ${unenriched.length} artists from Spotify`);
     await this.enrichAndUpsert(unenriched.map((a) => a.spotifyId));
   }
-
-  // ── Enrich a list of Spotify IDs and upsert into DB ──────────────────
-  // This is the core method — fetches metadata from Spotify in batches
-  // then upserts artists + genres.
 
   async enrichAndUpsert(spotifyIds: string[]): Promise<void> {
     if (!spotifyIds.length) return;
@@ -95,31 +68,92 @@ export class ArtistsService {
     }));
 
     const upserted = await this.artistsRepository.upsertManyBySpotifyId(rows);
-
-    // Build a spotifyId → dbId map for genre upserts
-    const idMap = new Map(upserted.map((a) => [a.spotifyId, a.id] as const));
-
-    for (const m of metadata) {
-      const dbId = idMap.get(m.spotifyId);
-      if (!dbId || !m.genres.length) continue;
-
-      const genres = m.genres.map((genre, i) => ({
-        genre: genre.toLowerCase(),
-        isPrimary: i === 0,
-      }));
-
-      await this.artistsRepository.upsertGenres(dbId, genres);
-    }
-
-    this.logger.log(`Upserted ${upserted.length} artists with genres`);
+    this.logger.log(`Upserted ${upserted.length} artists`);
   }
-
-  // ── Single artist refresh ─────────────────────────────────────────────
-  // Used to re-enrich a specific artist on demand.
 
   async refreshArtist(spotifyId: string) {
     await this.enrichAndUpsert([spotifyId]);
     return this.artistsRepository.findBySpotifyId(spotifyId);
+  }
+
+  // ── Dashboard: create ─────────────────────────────────────────────────
+  // For manually adding an artist that hasn't been discovered via Kworb yet.
+  // Fetches image from Spotify immediately.
+  async create(dto: CreateArtistInput) {
+    const slug = this.buildSlug(dto.name);
+
+    // pull image from Spotify if we can
+    let imageUrl: string | null = null;
+    try {
+      const meta = await this.spotifyMetadata.fetchArtistMetadata(
+        dto.spotifyId,
+      );
+      imageUrl = meta.imageUrl;
+    } catch {
+      this.logger.warn(
+        `Could not fetch Spotify metadata for ${dto.spotifyId} during create — proceeding without image`,
+      );
+    }
+
+    return this.artistsRepository.upsertBySpotifyId({
+      name: dto.name,
+      spotifyId: dto.spotifyId,
+      slug,
+      imageUrl,
+      originCountry: dto.originCountry ?? null,
+      debutYear: dto.debutYear ?? null,
+      bio: dto.bio ?? null,
+      isAfrobeats: dto.isAfrobeats ?? false,
+      isAfrobeatsOverride: dto.isAfrobeatsOverride ?? false,
+    });
+  }
+
+  // ── Dashboard: update ─────────────────────────────────────────────────
+  // Partial update by DB id — only touches fields explicitly passed in.
+  // This is what the dashboard calls when an editor fills in the form.
+
+  async update(id: string, dto: UpdateArtistInput) {
+    const existing = await this.artistsRepository.findById(id);
+    if (!existing) {
+      throw new NotFoundException(`Artist with id=${id} not found`);
+    }
+
+    // rebuild slug only if name changed
+    const slug =
+      dto.name && dto.name !== existing.name
+        ? this.buildSlug(dto.name)
+        : undefined;
+
+    return this.artistsRepository.updateById(id, {
+      ...dto,
+      ...(slug ? { slug } : {}),
+    });
+  }
+
+  // ── Dashboard: upsert by spotifyId ───────────────────────────────────
+  // Useful when the dashboard imports an artist by Spotify URL —
+  // creates if not exists, updates editorial fields if it does.
+  async upsertFromDashboard(spotifyId: string, dto: UpdateArtistInput) {
+    const existing = await this.artistsRepository.findBySpotifyId(spotifyId);
+
+    if (existing) {
+      return this.update(existing.id, dto);
+    }
+
+    // not in DB yet — fetch name + image from Spotify and create
+    const meta = await this.spotifyMetadata.fetchArtistMetadata(spotifyId);
+
+    return this.artistsRepository.upsertBySpotifyId({
+      name: dto.name ?? meta.name,
+      spotifyId,
+      slug: this.buildSlug(dto.name ?? meta.name),
+      imageUrl: dto.imageUrl ?? meta.imageUrl,
+      originCountry: dto.originCountry ?? null,
+      debutYear: dto.debutYear ?? null,
+      bio: dto.bio ?? null,
+      isAfrobeats: dto.isAfrobeats ?? false,
+      isAfrobeatsOverride: dto.isAfrobeatsOverride ?? false,
+    });
   }
 
   // ── Lookups ───────────────────────────────────────────────────────────
@@ -138,15 +172,9 @@ export class ArtistsService {
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
-  private deriveIsAfrobeats(genres: string[]): boolean {
-    return genres.some((g) => AFROBEATS_GENRES.has(g.toLowerCase()));
-  }
-
   private buildSlug(name: string): string {
     const result = slugify(name, { lower: true, strict: true });
-    if (typeof result === 'string') {
-      return result;
-    }
+    if (typeof result === 'string') return result;
     throw new Error(`Failed to slugify artist name: ${name}`);
   }
 }

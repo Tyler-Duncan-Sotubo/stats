@@ -157,4 +157,14 @@ export class ArtistsRepository {
 
     return rows.map((r) => r.spotifyId);
   }
+
+  async updateById(id: string, data: Partial<typeof artists.$inferInsert>) {
+    const [updated] = await this.db
+      .update(artists)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(artists.id, id))
+      .returning();
+
+    return updated;
+  }
 }

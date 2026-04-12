@@ -10,6 +10,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { SnapshotModule } from './modules/snapshots/snapshot.module';
 import { SongsModule } from './modules/songs/songs.module';
 import { AlbumsModule } from './modules/albums/albums.module';
+import { CertificationsModule } from './modules/certifications/certifications.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AlbumsModule } from './modules/albums/albums.module';
     SnapshotModule,
     SongsModule,
     AlbumsModule,
+    CertificationsModule,
   ],
 })
 export class AppModule {}
