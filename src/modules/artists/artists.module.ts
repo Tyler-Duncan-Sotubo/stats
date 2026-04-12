@@ -6,6 +6,6 @@ import { ScraperModule } from '../scraper/scraper.module';
 @Module({
   imports: [ScraperModule],
   providers: [ArtistsService, ArtistsRepository],
-  exports: [ArtistsService],
+  exports: [ArtistsService, ArtistsRepository],
 })
 export class ArtistsModule {}

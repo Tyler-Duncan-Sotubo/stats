@@ -160,20 +160,35 @@ export const artistStatsSnapshots = pgTable(
   'artist_stats_snapshots',
   {
     id: uuid('id').primaryKey().$defaultFn(defaultId),
+
     artistId: uuid('artist_id')
       .notNull()
       .references(() => artists.id, { onDelete: 'cascade' }),
-    spotifyMonthlyListeners: bigint('spotify_monthly_listeners', {
+
+    totalStreams: bigint('total_streams', { mode: 'number' }),
+    totalStreamsAsLead: bigint('total_streams_as_lead', { mode: 'number' }),
+    totalStreamsSolo: bigint('total_streams_solo', { mode: 'number' }),
+    totalStreamsAsFeature: bigint('total_streams_as_feature', {
       mode: 'number',
     }),
-    spotifyFollowers: bigint('spotify_followers', { mode: 'number' }),
-    popularity: integer('popularity'),
+
+    dailyStreams: bigint('daily_streams', { mode: 'number' }),
+    dailyStreamsAsLead: bigint('daily_streams_as_lead', { mode: 'number' }),
+    dailyStreamsAsFeature: bigint('daily_streams_as_feature', {
+      mode: 'number',
+    }),
+
+    trackCount: integer('track_count'),
+    sourceUpdatedAt: date('source_updated_at'),
     snapshotDate: date('snapshot_date').notNull(),
+
+    createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('artist_stats_artist_date_idx').on(t.artistId, t.snapshotDate),
     index('artist_stats_snapshot_date_idx').on(t.snapshotDate),
-    index('artist_stats_monthly_listeners_idx').on(t.spotifyMonthlyListeners),
+    index('artist_stats_total_streams_idx').on(t.totalStreams),
+    index('artist_stats_daily_streams_idx').on(t.dailyStreams),
   ],
 );
 

@@ -14,9 +14,12 @@ export interface SpotifyArtistMetadata {
 export interface SpotifyTrackMetadata {
   spotifyTrackId: string;
   title: string;
+  spotifyAlbumId: string;
   albumName: string;
+  albumType: string;
   albumImageUrl: string | null;
-  releaseDate: string; // "2023-03-24"
+  releaseDate: string;
+  totalTracks: number;
   durationMs: number;
   explicit: boolean;
 }
@@ -74,18 +77,32 @@ export class SpotifyMetadataService {
 
   // ── Artist metadata ───────────────────────────────────────────────────
   async fetchArtistMetadata(spotifyId: string): Promise<SpotifyArtistMetadata> {
-    const data = await this.get<any>(`/artists/${spotifyId}`);
+    const data = await this.get<Record<string, unknown>>(
+      `/artists/${spotifyId}`,
+    );
+    console.log(JSON.stringify(data, null, 2));
 
-    // Images are sorted largest to smallest — take first
-    const imageUrl = data.images?.[0]?.url ?? null;
+    const imageUrl =
+      Array.isArray(data.images) &&
+      data.images[0] &&
+      typeof data.images[0] === 'object'
+        ? ((data.images[0] as { url?: string }).url ?? null)
+        : null;
 
     return {
       spotifyId,
-      name: data.name,
+      name: typeof data.name === 'string' ? data.name : '',
       imageUrl,
-      followers: data.followers?.total ?? 0,
-      popularity: data.popularity ?? 0,
-      genres: data.genres ?? [],
+      followers:
+        typeof data.followers === 'object' &&
+        data.followers !== null &&
+        typeof (data.followers as { total?: unknown }).total === 'number'
+          ? (data.followers as { total: number }).total
+          : 0,
+      popularity: typeof data.popularity === 'number' ? data.popularity : 0,
+      genres: Array.isArray(data.genres)
+        ? data.genres.filter((g): g is string => typeof g === 'string')
+        : [],
     };
   }
 
@@ -124,14 +141,16 @@ export class SpotifyMetadataService {
     return {
       spotifyTrackId,
       title: data.name,
+      spotifyAlbumId: data.album?.id ?? '',
       albumName: data.album?.name ?? '',
+      albumType: data.album?.album_type ?? 'album',
       albumImageUrl: data.album?.images?.[0]?.url ?? null,
       releaseDate: data.album?.release_date ?? '',
+      totalTracks: data.album?.total_tracks ?? 0,
       durationMs: data.duration_ms ?? 0,
       explicit: data.explicit ?? false,
     };
   }
-
   // Batch fetch tracks — up to 50 per request
   async fetchMultipleTracks(
     spotifyTrackIds: string[],
@@ -144,12 +163,16 @@ export class SpotifyMetadataService {
 
       for (const track of data.tracks ?? []) {
         if (!track) continue;
+
         results.push({
           spotifyTrackId: track.id,
           title: track.name,
+          spotifyAlbumId: track.album?.id ?? '',
           albumName: track.album?.name ?? '',
+          albumType: track.album?.album_type ?? 'album',
           albumImageUrl: track.album?.images?.[0]?.url ?? null,
           releaseDate: track.album?.release_date ?? '',
+          totalTracks: track.album?.total_tracks ?? 0,
           durationMs: track.duration_ms ?? 0,
           explicit: track.explicit ?? false,
         });

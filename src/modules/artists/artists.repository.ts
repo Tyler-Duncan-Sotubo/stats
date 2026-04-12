@@ -2,11 +2,41 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
 import { artists, artistGenres } from '../../infrastructure/drizzle/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql, isNull } from 'drizzle-orm';
 
 @Injectable()
 export class ArtistsRepository {
   constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+
+  // artists.repository.ts — add this method
+
+  async upsertManyDiscovered(
+    data: { name: string; spotifyId: string; slug: string }[],
+  ) {
+    if (!data.length) return [];
+
+    return this.db
+      .insert(artists)
+      .values(data)
+      .onConflictDoUpdate({
+        target: artists.spotifyId,
+        set: {
+          // only update name if it changed — don't touch enriched fields
+          name: sql`excluded.name`,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning({ id: artists.id, spotifyId: artists.spotifyId });
+  }
+
+  // separate method to find artists that haven't been enriched yet
+  async findUnenriched(limit = 100) {
+    return this.db
+      .select({ id: artists.id, spotifyId: artists.spotifyId })
+      .from(artists)
+      .where(isNull(artists.imageUrl)) // imageUrl is null = never enriched
+      .limit(limit);
+  }
 
   async upsertBySpotifyId(data: typeof artists.$inferInsert) {
     const [result] = await this.db
@@ -63,6 +93,17 @@ export class ArtistsRepository {
       .select()
       .from(artists)
       .where(inArray(artists.spotifyId, spotifyIds));
+  }
+
+  async findAllWithSpotifyId() {
+    return this.db
+      .select({
+        id: artists.id,
+        name: artists.name,
+        spotifyId: artists.spotifyId,
+      })
+      .from(artists)
+      .where(sql`${artists.spotifyId} is not null`);
   }
 
   async findBySlug(slug: string) {

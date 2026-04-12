@@ -36,6 +36,8 @@ export class ArtistsService {
   // Seeds new artists from chart discovery, skips ones already in DB,
   // then immediately enriches new ones with Spotify metadata.
 
+  // artists.service.ts
+
   async seedFromDiscovery(discovered: DiscoveredArtist[]): Promise<void> {
     if (!discovered.length) return;
 
@@ -51,8 +53,28 @@ export class ArtistsService {
       return;
     }
 
-    this.logger.log(`Seeding ${newArtists.length} new artists`);
-    await this.enrichAndUpsert(newArtists.map((a) => a.spotifyId));
+    // Step 1: persist immediately with just what Kworb gave us
+    const rows = newArtists.map((a) => ({
+      name: a.name,
+      spotifyId: a.spotifyId,
+      slug: this.buildSlug(a.name),
+    }));
+
+    await this.artistsRepository.upsertManyDiscovered(rows);
+    this.logger.log(`Seeded ${rows.length} new artists from discovery`);
+  }
+
+  // Called by seedFromDiscovery opportunistically AND by its own cron
+  async enrichUnenriched(limit = 100): Promise<void> {
+    const unenriched = await this.artistsRepository.findUnenriched(limit);
+
+    if (!unenriched.length) {
+      this.logger.log('No unenriched artists found');
+      return;
+    }
+
+    this.logger.log(`Enriching ${unenriched.length} artists from Spotify`);
+    await this.enrichAndUpsert(unenriched.map((a) => a.spotifyId));
   }
 
   // ── Enrich a list of Spotify IDs and upsert into DB ──────────────────
@@ -65,19 +87,12 @@ export class ArtistsService {
     const metadata =
       await this.spotifyMetadata.fetchMultipleArtists(spotifyIds);
 
-    const rows = metadata.map((m) => {
-      const isAfrobeats = this.deriveIsAfrobeats(m.genres);
-
-      return {
-        name: m.name,
-        spotifyId: m.spotifyId,
-        slug: this.buildSlug(m.name),
-        imageUrl: m.imageUrl,
-        popularity: m.popularity,
-        isAfrobeats,
-        isAfrobeatsOverride: false,
-      };
-    });
+    const rows = metadata.map((m) => ({
+      name: m.name,
+      spotifyId: m.spotifyId,
+      slug: this.buildSlug(m.name),
+      imageUrl: m.imageUrl,
+    }));
 
     const upserted = await this.artistsRepository.upsertManyBySpotifyId(rows);
 

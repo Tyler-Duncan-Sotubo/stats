@@ -6,9 +6,14 @@ import { DatabaseModule } from './infrastructure/drizzle/drizzle.module';
 import { ScraperModule } from './modules/scraper/scraper.module';
 import { ArtistsModule } from './modules/artists/artists.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { SnapshotModule } from './modules/snapshots/snapshot.module';
+import { SongsModule } from './modules/songs/songs.module';
+import { AlbumsModule } from './modules/albums/albums.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     DatabaseModule,
     ConfigModule.forRoot({
       isGlobal: true,
@@ -30,6 +35,9 @@ import { DiscoveryModule } from './modules/discovery/discovery.module';
     ScraperModule,
     ArtistsModule,
     DiscoveryModule,
+    SnapshotModule,
+    SongsModule,
+    AlbumsModule,
   ],
 })
 export class AppModule {}

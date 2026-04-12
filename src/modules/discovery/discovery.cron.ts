@@ -15,10 +15,15 @@ export class DiscoveryCron {
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async discoverAndSeed() {
     this.logger.log('Running artist discovery cron');
-
     const discovered = await this.discovery.discoverFromMultipleCharts();
-    await this.artistsService.seedFromDiscovery(discovered);
-
+    await this.artistsService.seedFromDiscovery(discovered.artists);
     this.logger.log('Artist discovery cron complete');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async enrichPending() {
+    this.logger.log('Running artist enrichment cron');
+    await this.artistsService.enrichUnenriched();
+    this.logger.log('Artist enrichment cron complete');
   }
 }
