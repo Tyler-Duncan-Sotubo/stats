@@ -22,6 +22,7 @@ export class CertificationsRepository {
         albumId: input.albumId ?? null,
         territory: input.territory,
         body: input.body,
+        title: input.title, // include title
         level: input.level,
         units: input.units ?? null,
         certifiedAt: input.certifiedAt ?? null,
@@ -32,9 +33,10 @@ export class CertificationsRepository {
           certifications.artistId,
           certifications.territory,
           certifications.body,
-          certifications.level,
+          certifications.title, // conflict on title now
         ],
         set: {
+          level: input.level, // level can upgrade (gold → platinum)
           units: input.units ?? null,
           certifiedAt: input.certifiedAt ?? null,
           sourceUrl: input.sourceUrl ?? null,

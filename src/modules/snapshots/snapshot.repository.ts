@@ -196,7 +196,7 @@ export class SnapshotRepository {
   async findAllWithSpotifyId(): Promise<
     { id: string; spotifyId: string; name: string }[]
   > {
-    return this.db
+    const rows = await this.db
       .select({
         id: artists.id,
         spotifyId: artists.spotifyId,
@@ -204,6 +204,10 @@ export class SnapshotRepository {
       })
       .from(artists)
       .where(isNotNull(artists.spotifyId));
+
+    return rows.filter(
+      (r): r is typeof r & { spotifyId: string } => r.spotifyId !== null,
+    );
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────

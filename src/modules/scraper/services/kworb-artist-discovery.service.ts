@@ -82,7 +82,7 @@ export class KworbArtistDiscoveryService {
   // Multi-country fetch with deduplication
   // ─────────────────────────────────────────────────────────────────────────────
   async discoverFromMultipleCharts(
-    countries = ['ng', 'gh', 'ke', 'za', 'ug'],
+    countries = ['ng', 'gh', 'ke', 'za', 'ug', 'us', 'gb', 'ca'],
   ): Promise<DiscoveryResult> {
     const results = await Promise.allSettled(
       countries.map((c) => this.discoverFromDailyChart(c)),

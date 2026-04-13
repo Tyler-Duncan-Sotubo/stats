@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
 import { artists, artistGenres } from '../../infrastructure/drizzle/schema';
-import { eq, inArray, sql, isNull } from 'drizzle-orm';
+import { eq, inArray, sql, isNull, isNotNull, and } from 'drizzle-orm';
 
 @Injectable()
 export class ArtistsRepository {
@@ -103,7 +103,12 @@ export class ArtistsRepository {
         spotifyId: artists.spotifyId,
       })
       .from(artists)
-      .where(sql`${artists.spotifyId} is not null`);
+      .where(
+        sql`
+        ${artists.spotifyId} IS NOT NULL
+        AND (${artists.kworbStatus} IS NULL OR ${artists.kworbStatus} != 'not_found')
+      `,
+      );
   }
 
   async findBySlug(slug: string) {
@@ -153,9 +158,16 @@ export class ArtistsRepository {
     const rows = await this.db
       .select({ spotifyId: artists.spotifyId })
       .from(artists)
-      .where(inArray(artists.spotifyId, spotifyIds));
+      .where(
+        and(
+          isNotNull(artists.spotifyId),
+          inArray(artists.spotifyId, spotifyIds),
+        ),
+      );
 
-    return rows.map((r) => r.spotifyId);
+    return rows
+      .map((r) => r.spotifyId)
+      .filter((id): id is string => id !== null);
   }
 
   async updateById(id: string, data: Partial<typeof artists.$inferInsert>) {
@@ -166,5 +178,35 @@ export class ArtistsRepository {
       .returning();
 
     return updated;
+  }
+
+  async markKworbNotFound(artistId: string) {
+    await this.db
+      .update(artists)
+      .set({
+        kworbStatus: 'not_found',
+        kworbLastCheckedAt: new Date(),
+      })
+      .where(eq(artists.id, artistId));
+  }
+
+  // artists.repository.ts
+
+  async updateSpotifyId(id: string, spotifyId: string): Promise<void> {
+    await this.db
+      .update(artists)
+      .set({ spotifyId, updatedAt: new Date() })
+      .where(eq(artists.id, id));
+  }
+
+  async findAllBasic() {
+    return this.db
+      .select({
+        id: artists.id,
+        name: artists.name,
+        slug: artists.slug,
+        spotifyId: artists.spotifyId,
+      })
+      .from(artists);
   }
 }

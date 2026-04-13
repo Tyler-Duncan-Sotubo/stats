@@ -5,9 +5,9 @@ import { SnapshotRepository } from './snapshot.repository';
 import { ScraperModule } from '../scraper/scraper.module';
 import { ArtistsModule } from '../artists/artists.module';
 import { SnapshotCron } from './snapshot.cron';
-import { SongService } from '../songs/song.service';
 import { SongsRepository } from '../songs/songs.repository';
 import { AlbumsModule } from '../albums/albums.module';
+import { SongScraperService } from '../songs/song-scraper.service';
 
 @Module({
   imports: [ScraperModule, ArtistsModule, AlbumsModule],
@@ -16,7 +16,7 @@ import { AlbumsModule } from '../albums/albums.module';
     SnapshotService,
     SnapshotRepository,
     SnapshotCron,
-    SongService,
+    SongScraperService,
     SongsRepository,
   ],
 })

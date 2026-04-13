@@ -4,22 +4,39 @@ import { KworbArtistDiscoveryService } from './services/kworb-artist-discovery.s
 import { KworbTotalsService } from './services/kworb-totals.service';
 import { SpotifyMetadataService } from './services/spotify-metadata.service';
 import { RiaaCertificationService } from './services/riaa-certification.service';
-import { BpiCertificationService } from './services/bpi-certification.service';
+import { BillboardBackfillService } from './billboard/billboard-backfill.service';
+import { BullModule } from '@nestjs/bullmq';
+import { BillboardBackfillProducer } from './billboard/billboard-backfill.producer';
+import { BillboardBackfillProcessor } from './billboard/billboard-backfill.processor';
+import { OfficialChartsBackfillProducer } from './uk-chart/official-charts-backfill.producer';
+import { OfficialChartsBackfillProcessor } from './uk-chart/official-charts-backfill.processor';
+import { OfficialChartsBackfillService } from './uk-chart/official-charts-backfill.service';
 
 @Module({
+  // scraper.module.ts
+  imports: [
+    BullModule.registerQueue(
+      { name: 'billboardBackfillQueue' },
+      { name: 'officialChartsBackfillQueue' },
+    ),
+  ],
   controllers: [ScraperController],
   providers: [
     KworbArtistDiscoveryService,
     KworbTotalsService,
     SpotifyMetadataService,
-    BpiCertificationService,
     RiaaCertificationService,
+    BillboardBackfillService,
+    BillboardBackfillProducer,
+    BillboardBackfillProcessor,
+    OfficialChartsBackfillProducer,
+    OfficialChartsBackfillProcessor,
+    OfficialChartsBackfillService,
   ],
   exports: [
     KworbArtistDiscoveryService,
     KworbTotalsService,
     SpotifyMetadataService,
-    BpiCertificationService,
     RiaaCertificationService,
   ],
 })

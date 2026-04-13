@@ -5,8 +5,9 @@ import { CertificationsService } from './certifications.service';
 import { CertificationsRepository } from './certifications.repository';
 import { CertificationsController } from './certifications.controller';
 import { RiaaCertificationService } from '../scraper/services/riaa-certification.service';
-import { BpiCertificationService } from '../scraper/services/bpi-certification.service';
 import { ArtistsModule } from '../artists/artists.module';
+import { CertificationsScheduler } from './certifications.scheduler';
+import { SongsRepository } from '../songs/songs.repository';
 
 @Module({
   imports: [ArtistsModule],
@@ -15,7 +16,8 @@ import { ArtistsModule } from '../artists/artists.module';
     CertificationsService,
     CertificationsRepository,
     RiaaCertificationService,
-    BpiCertificationService,
+    CertificationsScheduler,
+    SongsRepository,
   ],
   exports: [CertificationsService],
 })

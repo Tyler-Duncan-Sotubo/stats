@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ArtistsRepository } from '../artists/artists.repository';
 import { KworbTotalsService } from '../scraper/services/kworb-totals.service';
 import { SnapshotRepository } from './snapshot.repository';
-import { SongService } from '../songs/song.service';
+import { SongScraperService } from '../songs/song-scraper.service';
+import axios from 'axios';
 
 @Injectable()
 export class SnapshotService {
@@ -12,7 +13,7 @@ export class SnapshotService {
     private readonly kworbTotals: KworbTotalsService,
     private readonly snapshotRepository: SnapshotRepository,
     private readonly artistsRepository: ArtistsRepository,
-    private readonly songService: SongService,
+    private readonly songScraperService: SongScraperService,
   ) {}
 
   // ── Public: snapshot a single artist by spotifyId ─────────────────────
@@ -27,8 +28,11 @@ export class SnapshotService {
       this.logger.warn(`Artist not found for spotifyId=${spotifyId}, skipping`);
       return;
     }
-
-    await this.snapshotArtistById(artist, today);
+    if (!artist.spotifyId) return;
+    await this.snapshotArtistById(
+      artist as { id: string; spotifyId: string; name: string },
+      today,
+    );
   }
 
   // ── Public: snapshot every artist in the DB ───────────────────────────
@@ -48,15 +52,34 @@ export class SnapshotService {
       const batch = allArtists.slice(i, i + batchSize);
 
       const results = await Promise.allSettled(
-        batch.map((artist) => this.snapshotArtistById(artist, today)),
+        batch.map((artist) =>
+          this.snapshotArtistById(
+            artist as { id: string; spotifyId: string; name: string },
+            today,
+          ),
+        ),
       );
 
       for (let j = 0; j < results.length; j++) {
         const result = results[j];
+
         if (result.status === 'rejected') {
+          const artist = batch[j];
+          const reason =
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason);
+
+          if (axios.isAxiosError(result.reason)) {
+            const status = result.reason.response?.status;
+
+            if (status === 404) {
+              await this.artistsRepository.markKworbNotFound(artist.id);
+            }
+          }
           failed++;
           this.logger.error(
-            `Failed to snapshot ${batch[j].spotifyId}: ${result.reason}`,
+            `Failed to snapshot ${artist.spotifyId}: ${reason}`,
           );
         } else {
           succeeded++;
@@ -65,7 +88,7 @@ export class SnapshotService {
 
       // don't sleep after the last batch
       if (i + batchSize < allArtists.length) {
-        await this.sleep(1500);
+        await this.sleep(5000);
       }
     }
 
@@ -102,11 +125,10 @@ export class SnapshotService {
     // parallelise song upserts — no dependency between them
     await Promise.all(
       payload.songs.map(async (song) => {
-        const dbSong = await this.songService.findOrCreateMinimalSong({
+        const dbSong = await this.songScraperService.findOrCreate({
           artistId: artist.id,
           title: song.title,
           spotifyTrackId: song.spotifyTrackId,
-          isFeature: song.isFeature,
         });
 
         await this.snapshotRepository.upsertSongSnapshot({

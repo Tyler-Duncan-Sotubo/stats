@@ -70,4 +70,116 @@ export class AlbumsRepository {
       })
       .returning();
   }
+
+  // albums.repository.ts — add these three methods
+
+  // ── Scraper writes — never touches isAfrobeats ────────────────────────
+
+  async upsertScraperFields(data: {
+    artistId: string;
+    spotifyAlbumId: string;
+    title: string;
+    slug: string;
+    albumType: string;
+    releaseDate: string | null;
+    imageUrl: string | null;
+    totalTracks: number | null;
+  }) {
+    const [row] = await this.db
+      .insert(albums)
+      .values({ ...data, isAfrobeats: false })
+      .onConflictDoUpdate({
+        target: albums.spotifyAlbumId,
+        set: {
+          artistId: sql`excluded.artist_id`,
+          title: sql`excluded.title`,
+          slug: sql`excluded.slug`,
+          albumType: sql`excluded.album_type`,
+          releaseDate: sql`excluded.release_date`,
+          imageUrl: sql`excluded.image_url`,
+          totalTracks: sql`excluded.total_tracks`,
+          // isAfrobeats deliberately excluded — scraper never touches it
+        },
+      })
+      .returning();
+
+    return row;
+  }
+
+  async upsertManyScraperFields(
+    data: {
+      artistId: string;
+      spotifyAlbumId: string;
+      title: string;
+      slug: string;
+      albumType: string;
+      releaseDate: string | null;
+      imageUrl: string | null;
+      totalTracks: number | null;
+    }[],
+  ) {
+    if (!data.length) return [];
+
+    return this.db
+      .insert(albums)
+      .values(data.map((d) => ({ ...d, isAfrobeats: false })))
+      .onConflictDoUpdate({
+        target: albums.spotifyAlbumId,
+        set: {
+          artistId: sql`excluded.artist_id`,
+          title: sql`excluded.title`,
+          slug: sql`excluded.slug`,
+          albumType: sql`excluded.album_type`,
+          releaseDate: sql`excluded.release_date`,
+          imageUrl: sql`excluded.image_url`,
+          totalTracks: sql`excluded.total_tracks`,
+          // isAfrobeats deliberately excluded
+        },
+      })
+      .returning();
+  }
+
+  // ── Dashboard writes — full control including editorial fields ─────────
+
+  async upsertAllFields(data: typeof albums.$inferInsert) {
+    const [row] = await this.db
+      .insert(albums)
+      .values(data)
+      .onConflictDoUpdate({
+        target: albums.spotifyAlbumId,
+        set: {
+          artistId: sql`excluded.artist_id`,
+          title: sql`excluded.title`,
+          slug: sql`excluded.slug`,
+          albumType: sql`excluded.album_type`,
+          releaseDate: sql`excluded.release_date`,
+          imageUrl: sql`excluded.image_url`,
+          totalTracks: sql`excluded.total_tracks`,
+          isAfrobeats: sql`excluded.is_afrobeats`,
+        },
+      })
+      .returning();
+
+    return row;
+  }
+
+  async updateById(id: string, data: Partial<typeof albums.$inferInsert>) {
+    const [row] = await this.db
+      .update(albums)
+      .set({ ...data })
+      .where(eq(albums.id, id))
+      .returning();
+
+    return row;
+  }
+
+  async findById(id: string) {
+    const [row] = await this.db
+      .select()
+      .from(albums)
+      .where(eq(albums.id, id))
+      .limit(1);
+
+    return row ?? null;
+  }
 }

@@ -1,9 +1,96 @@
 {
-  "id": "8e59d1fd-2ee2-495c-ab5d-d7156a64f614",
+  "id": "addcfd79-dcde-47cf-9850-b7c56396fb1b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password": {
+          "name": "password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'contributor'"
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "users_email_idx": {
+          "name": "users_email_idx",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.albums": {
       "name": "albums",
       "schema": "",
@@ -266,21 +353,57 @@
           "primaryKey": false,
           "notNull": true
         },
-        "spotify_monthly_listeners": {
-          "name": "spotify_monthly_listeners",
+        "total_streams": {
+          "name": "total_streams",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
-        "spotify_followers": {
-          "name": "spotify_followers",
+        "total_streams_as_lead": {
+          "name": "total_streams_as_lead",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
-        "popularity": {
-          "name": "popularity",
+        "total_streams_solo": {
+          "name": "total_streams_solo",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_streams_as_feature": {
+          "name": "total_streams_as_feature",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_streams": {
+          "name": "daily_streams",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_streams_as_lead": {
+          "name": "daily_streams_as_lead",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_streams_as_feature": {
+          "name": "daily_streams_as_feature",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "track_count": {
+          "name": "track_count",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_updated_at": {
+          "name": "source_updated_at",
+          "type": "date",
           "primaryKey": false,
           "notNull": false
         },
@@ -289,6 +412,13 @@
           "type": "date",
           "primaryKey": false,
           "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
@@ -328,11 +458,26 @@
           "method": "btree",
           "with": {}
         },
-        "artist_stats_monthly_listeners_idx": {
-          "name": "artist_stats_monthly_listeners_idx",
+        "artist_stats_total_streams_idx": {
+          "name": "artist_stats_total_streams_idx",
           "columns": [
             {
-              "expression": "spotify_monthly_listeners",
+              "expression": "total_streams",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "artist_stats_daily_streams_idx": {
+          "name": "artist_stats_daily_streams_idx",
+          "columns": [
+            {
+              "expression": "daily_streams",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -385,7 +530,7 @@
           "name": "spotify_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "slug": {
           "name": "slug",
@@ -434,6 +579,18 @@
         "bio": {
           "name": "bio",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kworb_status": {
+          "name": "kworb_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kworb_last_checked_at": {
+          "name": "kworb_last_checked_at",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
@@ -550,7 +707,7 @@
           "name": "artist_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "song_id": {
           "name": "song_id",
@@ -563,6 +720,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "award_body": {
+          "name": "award_body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "award_name": {
           "name": "award_name",
@@ -593,11 +756,43 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "territory": {
+          "name": "territory",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
-        "award_records_artist_idx": {
-          "name": "award_records_artist_idx",
+        "awards_artist_idx": {
+          "name": "awards_artist_idx",
           "columns": [
             {
               "expression": "artist_id",
@@ -611,9 +806,66 @@
           "method": "btree",
           "with": {}
         },
-        "award_records_award_year_idx": {
-          "name": "award_records_award_year_idx",
+        "awards_year_idx": {
+          "name": "awards_year_idx",
           "columns": [
+            {
+              "expression": "year",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "awards_body_idx": {
+          "name": "awards_body_idx",
+          "columns": [
+            {
+              "expression": "award_body",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "awards_result_idx": {
+          "name": "awards_result_idx",
+          "columns": [
+            {
+              "expression": "result",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "awards_unique_idx": {
+          "name": "awards_unique_idx",
+          "columns": [
+            {
+              "expression": "artist_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "award_body",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "award_name",
               "isExpression": false,
@@ -627,28 +879,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "award_records_result_idx": {
-          "name": "award_records_result_idx",
-          "columns": [
-            {
-              "expression": "award_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "result",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -678,7 +909,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "award_records_album_id_albums_id_fk": {
@@ -691,7 +922,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -740,6 +971,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
         },
         "level": {
           "name": "level",
@@ -841,6 +1079,39 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "certs_unique_idx": {
+          "name": "certs_unique_idx",
+          "columns": [
+            {
+              "expression": "artist_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "territory",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "body",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "title",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1568,7 +1839,7 @@
           "name": "spotify_track_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "release_date": {
           "name": "release_date",
@@ -1626,6 +1897,21 @@
           "method": "btree",
           "with": {}
         },
+        "songs_slug_idx": {
+          "name": "songs_slug_idx",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "songs_artist_id_idx": {
           "name": "songs_artist_id_idx",
           "columns": [
@@ -1661,21 +1947,6 @@
           "columns": [
             {
               "expression": "release_date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "songs_slug_idx": {
-          "name": "songs_slug_idx",
-          "columns": [
-            {
-              "expression": "slug",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1737,7 +2008,17 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.role": {
+      "name": "role",
+      "schema": "public",
+      "values": [
+        "admin",
+        "editor",
+        "contributor"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

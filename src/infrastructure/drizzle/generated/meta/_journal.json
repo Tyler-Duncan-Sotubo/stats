@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1775932328102,
-      "tag": "0000_ambiguous_yellow_claw",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1775942310344,
-      "tag": "0001_pretty_leo",
+      "when": 1776061139057,
+      "tag": "0000_mean_grey_gargoyle",
       "breakpoints": true
     }
   ]

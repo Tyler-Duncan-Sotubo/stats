@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+// import { Cron } from '@nestjs/schedule';
 import { SnapshotService } from './snapshot.service';
 
 @Injectable()
@@ -8,11 +8,9 @@ export class SnapshotCron {
 
   constructor(private readonly snapshotService: SnapshotService) {}
 
-  // Runs every day at 3 AM
-  // @Cron(CronExpression.EVERY_DAY_AT_3AM)
-  @Cron('0 23 * * *', {
-    timeZone: 'Europe/London',
-  })
+  // @Cron('07 14 * * *', {
+  //   timeZone: 'Europe/London',
+  // })
   async handleDailySnapshot() {
     this.logger.log('Starting daily artist snapshot job');
 

@@ -17,29 +17,71 @@ export class ArtistsService {
 
   // ── Discovery pipeline ────────────────────────────────────────────────
 
+  // artists.service.ts
+
   async seedFromDiscovery(discovered: DiscoveredArtist[]): Promise<void> {
     if (!discovered.length) return;
 
-    const incomingIds = discovered.map((d) => d.spotifyId);
-    const existingIds =
-      await this.artistsRepository.getExistingSpotifyIds(incomingIds);
-    const existingSet = new Set(existingIds);
+    // Load everything we need in one shot
+    const existingArtists = await this.artistsRepository.findAllBasic();
 
-    const newArtists = discovered.filter((d) => !existingSet.has(d.spotifyId));
+    const bySpotifyId = new Map(
+      existingArtists.filter((a) => a.spotifyId).map((a) => [a.spotifyId!, a]),
+    );
 
-    if (!newArtists.length) {
-      this.logger.log('No new artists to seed — all already exist in DB');
-      return;
+    const byNormName = new Map(
+      existingArtists.map((a) => [this.normaliseName(a.name), a]),
+    );
+
+    const bySlug = new Map(existingArtists.map((a) => [a.slug, a]));
+
+    const toCreate: { name: string; spotifyId: string; slug: string }[] = [];
+    const toEnrich: { id: string; spotifyId: string }[] = []; // existing artist needs spotifyId added
+
+    for (const artist of discovered) {
+      const normName = this.normaliseName(artist.name);
+      const slug = this.buildSlug(artist.name);
+
+      // Case 1 — already have this Spotify ID → skip entirely
+      if (bySpotifyId.has(artist.spotifyId)) continue;
+
+      // Case 2 — artist exists by name but has no Spotify ID yet
+      // (was seeded by Billboard backfill) → update with Spotify ID
+      const existingByName = byNormName.get(normName) || bySlug.get(slug);
+      if (existingByName && !existingByName.spotifyId) {
+        toEnrich.push({ id: existingByName.id, spotifyId: artist.spotifyId });
+        continue;
+      }
+
+      // Case 3 — genuinely new artist not in DB at all → create
+      if (!existingByName) {
+        toCreate.push({ name: artist.name, spotifyId: artist.spotifyId, slug });
+      }
     }
 
-    const rows = newArtists.map((a) => ({
-      name: a.name,
-      spotifyId: a.spotifyId,
-      slug: this.buildSlug(a.name),
-    }));
+    // Apply enrichment updates — add spotifyId to Billboard-seeded artists
+    if (toEnrich.length) {
+      await Promise.all(
+        toEnrich.map(({ id, spotifyId }) =>
+          this.artistsRepository.updateSpotifyId(id, spotifyId),
+        ),
+      );
+      this.logger.log(
+        `Linked Spotify IDs to ${toEnrich.length} existing artists`,
+      );
+    }
 
-    await this.artistsRepository.upsertManyDiscovered(rows);
-    this.logger.log(`Seeded ${rows.length} new artists from discovery`);
+    // Create genuinely new artists
+    if (toCreate.length) {
+      await this.artistsRepository.upsertManyDiscovered(toCreate);
+      this.logger.log(
+        `Created ${toCreate.length} new artists from Kworb discovery`,
+      );
+    }
+
+    if (!toEnrich.length && !toCreate.length) {
+      this.logger.log('No new artists to seed — all already exist in DB');
+    }
   }
 
   async enrichUnenriched(limit = 100): Promise<void> {
@@ -50,8 +92,19 @@ export class ArtistsService {
       return;
     }
 
-    this.logger.log(`Enriching ${unenriched.length} artists from Spotify`);
-    await this.enrichAndUpsert(unenriched.map((a) => a.spotifyId));
+    // filter out artists that don't have a spotifyId yet
+    // (e.g. billboard-only artists waiting to be matched)
+    const withSpotifyId = unenriched
+      .map((a) => a.spotifyId)
+      .filter((id): id is string => id !== null);
+
+    if (!withSpotifyId.length) {
+      this.logger.log('No unenriched artists with a Spotify ID — skipping');
+      return;
+    }
+
+    this.logger.log(`Enriching ${withSpotifyId.length} artists from Spotify`);
+    await this.enrichAndUpsert(withSpotifyId);
   }
 
   async enrichAndUpsert(spotifyIds: string[]): Promise<void> {
@@ -176,5 +229,17 @@ export class ArtistsService {
     const result = slugify(name, { lower: true, strict: true });
     if (typeof result === 'string') return result;
     throw new Error(`Failed to slugify artist name: ${name}`);
+  }
+
+  private normaliseName(value: string): string {
+    return value
+      .toLowerCase()
+      .normalize('NFD') // split accents
+      .replace(/[\u0300-\u036f]/g, '') // remove accents
+      .replace(/&/g, 'and') // standardise &
+      .replace(/['"]/g, '') // remove quotes
+      .replace(/[^a-z0-9\s]/g, ' ') // remove punctuation
+      .replace(/\s+/g, ' ') // collapse whitespace
+      .trim();
   }
 }
