@@ -1,7 +1,7 @@
 // src/modules/certifications/certifications.scheduler.ts
 
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+// import { Cron, CronExpression } from '@nestjs/schedule';
 import { CertificationsService } from './certifications.service';
 import { ArtistsRepository } from '../artists/artists.repository';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -33,7 +33,7 @@ export class CertificationsScheduler {
   // For faster coverage set BATCH_SIZE = 50 and cron to every 2 hours:
   // 12 runs × 50 = 600 per day — full list in one day
   // ─────────────────────────────────────────────────────────────────────────────
-  @Cron(CronExpression.EVERY_MINUTE)
+  // @Cron(CronExpression.EVERY_MINUTE)
   async processBatch(): Promise<void> {
     this.logger.log('RIAA batch sync starting');
 

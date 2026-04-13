@@ -11,6 +11,8 @@ import { BillboardBackfillProcessor } from './billboard/billboard-backfill.proce
 import { OfficialChartsBackfillProducer } from './uk-chart/official-charts-backfill.producer';
 import { OfficialChartsBackfillProcessor } from './uk-chart/official-charts-backfill.processor';
 import { OfficialChartsBackfillService } from './uk-chart/official-charts-backfill.service';
+import { DailyChartIngestionService } from './chart/daily-chart-ingestion.service';
+import { SpotifyDailyService } from './chart/spotify-daily.service';
 
 @Module({
   // scraper.module.ts
@@ -32,12 +34,15 @@ import { OfficialChartsBackfillService } from './uk-chart/official-charts-backfi
     OfficialChartsBackfillProducer,
     OfficialChartsBackfillProcessor,
     OfficialChartsBackfillService,
+    DailyChartIngestionService,
+    SpotifyDailyService,
   ],
   exports: [
     KworbArtistDiscoveryService,
     KworbTotalsService,
     SpotifyMetadataService,
     RiaaCertificationService,
+    DailyChartIngestionService,
   ],
 })
 export class ScraperModule {}

@@ -9,9 +9,11 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  smallint,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { defaultId } from '../default-id';
+import { varchar } from 'drizzle-orm/pg-core';
 // ─────────────────────────────────────────────────────────────────────────────
 // ARTISTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -290,6 +292,20 @@ export const chartEntries = pgTable(
     index('chart_entries_position_idx').on(t.chartName, t.position),
     index('chart_entries_peak_idx').on(t.chartName, t.peakPosition),
   ],
+);
+
+export const chartEntrySnapshots = pgTable(
+  'chart_entry_snapshots',
+  {
+    entryId: uuid('entry_id')
+      .primaryKey()
+      .references(() => chartEntries.id, { onDelete: 'cascade' }),
+
+    prevRank: smallint('prev_rank'),
+    delta: smallint('delta'),
+    trend: varchar('trend').notNull().default('NEW'),
+  },
+  (t) => [uniqueIndex('ux_snapshot_entry').on(t.entryId)],
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
