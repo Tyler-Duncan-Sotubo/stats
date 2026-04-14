@@ -128,10 +128,6 @@ export class BillboardBackfillService {
 
           if (rows.length) {
             totalEntries++;
-          } else {
-            this.logger.warn(
-              `[Skipped — already exists] ${date} #${entry.this_week} "${entry.song}" by "${entry.artist}"`,
-            );
           }
         } catch (err) {
           this.logger.error(
