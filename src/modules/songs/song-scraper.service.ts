@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SongsRepository } from './songs.repository';
 import { AlbumScraperService } from '../albums/album-scraper.service';
 import { SpotifyMetadataService } from '../scraper/services/spotify-metadata.service';
+import { EntityResolutionService } from '../catalog/entity-resolution.service';
 
 export interface MinimalSongInput {
   artistId: string;
@@ -17,41 +18,31 @@ export class SongScraperService {
     private readonly songsRepository: SongsRepository,
     private readonly spotifyMetadataService: SpotifyMetadataService,
     private readonly albumScraperService: AlbumScraperService,
+    private readonly entityResolutionService: EntityResolutionService,
   ) {}
 
-  // ── Called by snapshot pipeline ───────────────────────────────────────
-  // Creates a bare-minimum song record from Kworb data.
-  // No Spotify call — just enough to attach snapshots to.
-
+  // Called by snapshot pipeline
+  // Minimal resolve/create from Kworb-style data
   async findOrCreate(input: MinimalSongInput) {
-    const existing = await this.songsRepository.findBySpotifyTrackId(
-      input.spotifyTrackId,
-    );
-
-    if (existing) return existing;
-
-    const slug = this.buildSlug(input.title, input.spotifyTrackId);
-
-    const created = await this.songsRepository.upsertScraperFields({
+    const resolved = await this.entityResolutionService.resolveSong({
       artistId: input.artistId,
-      spotifyTrackId: input.spotifyTrackId,
       title: input.title,
-      slug,
-      explicit: false,
-      isAfrobeats: false,
+      spotifyTrackId: input.spotifyTrackId,
+      source: 'kworb',
+      allowCreate: true,
+      markProvisionalIfCreated: false,
     });
 
-    this.logger.log(
-      `[Scraper] Created song "${input.title}" (${input.spotifyTrackId})`,
-    );
+    if (!resolved) {
+      throw new Error(
+        `Failed to resolve song "${input.title}" (${input.spotifyTrackId})`,
+      );
+    }
 
-    return created;
+    return resolved;
   }
 
-  // ── Called by enrichment cron ─────────────────────────────────────────
-  // Fetches full metadata from Spotify and fills in album, duration etc.
-  // Preserves existing isAfrobeats — never overwrites it.
-
+  // Called by enrichment cron
   async enrichOne(artistId: string, spotifyTrackId: string) {
     const metadata =
       await this.spotifyMetadataService.fetchTrackMetadata(spotifyTrackId);
@@ -68,30 +59,55 @@ export class SongScraperService {
         imageUrl: metadata.albumImageUrl,
         totalTracks: metadata.totalTracks,
       });
+
       albumId = album.id;
     }
 
-    const existing =
-      await this.songsRepository.findBySpotifyTrackId(spotifyTrackId);
-
-    const slug =
-      existing?.slug ?? this.buildSlug(metadata.title, metadata.spotifyTrackId);
-
-    return this.songsRepository.upsertScraperFields({
+    const resolved = await this.entityResolutionService.resolveSong({
       artistId,
-      spotifyTrackId: metadata.spotifyTrackId,
       title: metadata.title,
-      slug,
+      spotifyTrackId: metadata.spotifyTrackId,
+      source: 'spotify',
+      allowCreate: true,
+      markProvisionalIfCreated: false,
+      externalIds: [
+        {
+          source: 'spotify',
+          externalId: metadata.spotifyTrackId,
+        },
+      ],
+    });
+
+    if (!resolved) {
+      throw new Error(
+        `Failed to resolve enriched song "${metadata.title}" (${metadata.spotifyTrackId})`,
+      );
+    }
+
+    const existing = await this.songsRepository.findById(resolved.id);
+    if (!existing) {
+      throw new Error(
+        `Resolved song ${resolved.id} not found after resolution`,
+      );
+    }
+
+    return this.songsRepository.updateById(resolved.id, {
+      artistId,
       albumId,
+      title: metadata.title,
+      normalizedTitle: this.normalizeTitle(metadata.title),
+      canonicalTitle: metadata.title,
+      spotifyTrackId: metadata.spotifyTrackId,
       releaseDate: metadata.releaseDate || null,
       durationMs: metadata.durationMs,
       explicit: metadata.explicit,
       imageUrl: metadata.albumImageUrl,
-      isAfrobeats: existing?.isAfrobeats ?? false,
+      isAfrobeats: existing.isAfrobeats ?? false,
+      sourceOfTruth: 'spotify',
+      entityStatus: existing.entityStatus ?? 'canonical',
+      needsReview: false,
     });
   }
-
-  // ── Batch enrichment ──────────────────────────────────────────────────
 
   async enrichMany(artistId: string, spotifyTrackIds: string[]) {
     if (!spotifyTrackIds.length) return [];
@@ -104,10 +120,11 @@ export class SongScraperService {
       await this.songsRepository.findBySpotifyTrackIds(uniqueIds);
 
     const existingMap = new Map(
-      existingSongs.map((s) => [s.spotifyTrackId, s]),
+      existingSongs
+        .filter((s) => s.spotifyTrackId)
+        .map((s) => [s.spotifyTrackId!, s]),
     );
 
-    // Upsert albums first — deduplicated
     const albumInputs = Array.from(
       new Map(
         metadataRows
@@ -131,36 +148,60 @@ export class SongScraperService {
       await this.albumScraperService.upsertMany(albumInputs);
     const albumMap = new Map(upsertedAlbums.map((a) => [a.spotifyAlbumId, a]));
 
-    const songPayload = metadataRows.map((track) => {
-      const existing = existingMap.get(track.spotifyTrackId);
+    const results: Awaited<ReturnType<typeof this.enrichOne>>[] = [];
+
+    for (const track of metadataRows) {
       const album = track.spotifyAlbumId
         ? albumMap.get(track.spotifyAlbumId)
         : null;
 
-      return {
+      const resolved = await this.entityResolutionService.resolveSong({
         artistId,
-        spotifyTrackId: track.spotifyTrackId,
         title: track.title,
-        slug:
-          existing?.slug ?? this.buildSlug(track.title, track.spotifyTrackId),
+        spotifyTrackId: track.spotifyTrackId,
+        source: 'spotify',
+        allowCreate: true,
+        markProvisionalIfCreated: false,
+        externalIds: [
+          {
+            source: 'spotify',
+            externalId: track.spotifyTrackId,
+          },
+        ],
+      });
+
+      if (!resolved) {
+        this.logger.warn(
+          `[Scraper] Failed to resolve song ${track.title} (${track.spotifyTrackId})`,
+        );
+        continue;
+      }
+
+      const existing = existingMap.get(track.spotifyTrackId);
+
+      const saved = await this.songsRepository.updateById(resolved.id, {
+        artistId,
         albumId: album?.id ?? null,
+        title: track.title,
+        normalizedTitle: this.normalizeTitle(track.title),
+        canonicalTitle: track.title,
+        spotifyTrackId: track.spotifyTrackId,
         releaseDate: track.releaseDate || null,
         durationMs: track.durationMs,
         explicit: track.explicit,
         imageUrl: track.albumImageUrl,
         isAfrobeats: existing?.isAfrobeats ?? false,
-      };
-    });
+        sourceOfTruth: 'spotify',
+        entityStatus: existing?.entityStatus ?? 'canonical',
+        needsReview: false,
+      });
 
-    const saved =
-      await this.songsRepository.upsertManyScraperFields(songPayload);
-    this.logger.log(`[Scraper] Bulk enriched ${saved.length} songs`);
+      results.push(saved);
+    }
 
-    return saved;
+    this.logger.log(`[Scraper] Bulk enriched ${results.length} songs`);
+    return results;
   }
-
-  // ── Pending enrichment ────────────────────────────────────────────────
-  // Called by the cron — finds songs missing Spotify metadata.
 
   async enrichPending(spotifyTrackIds: string[], artistId: string) {
     const results: Awaited<ReturnType<typeof this.enrichOne>>[] = [];
@@ -181,20 +222,19 @@ export class SongScraperService {
     this.logger.log(
       `[Scraper] Enriched ${results.length} songs, ${failed} failed`,
     );
+
     return results;
   }
 
-  private buildSlug(title: string, spotifyTrackId: string): string {
-    return `${this.slugify(title)}-${spotifyTrackId.slice(0, 8)}`;
-  }
-
-  private slugify(value: string): string {
+  private normalizeTitle(value: string): string {
     return value
       .toLowerCase()
       .trim()
-      .replace(/['"]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/-{2,}/g, '-');
+      .replace(/\s*\(feat\.?.*?\)/gi, '')
+      .replace(/\s*\(ft\.?.*?\)/gi, '')
+      .replace(/\s*\[feat\.?.*?\]/gi, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }

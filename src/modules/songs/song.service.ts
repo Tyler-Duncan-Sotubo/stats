@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { SongsRepository } from './songs.repository';
+import slugify from 'slugify';
 
 export interface CreateSongInput {
   artistId: string;
@@ -29,8 +30,6 @@ export class SongService {
 
   constructor(private readonly songsRepository: SongsRepository) {}
 
-  // ── Lookups ───────────────────────────────────────────────────────────
-
   async findById(id: string) {
     return this.songsRepository.findById(id);
   }
@@ -39,15 +38,16 @@ export class SongService {
     return this.songsRepository.findBySpotifyTrackId(spotifyTrackId);
   }
 
-  // ── Dashboard: create ─────────────────────────────────────────────────
-
   async create(input: CreateSongInput) {
     const slug = this.buildSlug(input.title, input.spotifyTrackId);
+    const normalizedTitle = this.normalizeTitle(input.title);
 
     return this.songsRepository.upsertAllFields({
       artistId: input.artistId,
       spotifyTrackId: input.spotifyTrackId,
       title: input.title,
+      normalizedTitle,
+      canonicalTitle: input.title,
       slug,
       albumId: input.albumId ?? null,
       releaseDate: input.releaseDate ?? null,
@@ -55,10 +55,11 @@ export class SongService {
       explicit: input.explicit ?? false,
       isAfrobeats: input.isAfrobeats ?? false,
       imageUrl: input.imageUrl ?? null,
+      sourceOfTruth: 'manual',
+      entityStatus: 'canonical',
+      needsReview: false,
     });
   }
-
-  // ── Dashboard: update ─────────────────────────────────────────────────
 
   async update(id: string, input: UpdateSongInput) {
     const existing = await this.songsRepository.findById(id);
@@ -66,28 +67,45 @@ export class SongService {
       throw new NotFoundException(`Song with id=${id} not found`);
     }
 
-    const slug =
-      input.title && input.title !== existing.title
-        ? this.buildSlug(input.title, existing.spotifyTrackId!)
-        : undefined;
-
-    return this.songsRepository.updateById(id, {
+    const patch: Partial<typeof existing> = {
       ...input,
-      ...(slug ? { slug } : {}),
-    });
+    };
+
+    if (input.title && input.title !== existing.title) {
+      patch.normalizedTitle = this.normalizeTitle(input.title);
+      patch.canonicalTitle = input.title;
+
+      if (existing.spotifyTrackId) {
+        patch.slug = this.buildSlug(input.title, existing.spotifyTrackId);
+      } else {
+        patch.slug = this.buildFallbackSlug(input.title, existing.artistId);
+      }
+    }
+
+    return this.songsRepository.updateById(id, patch);
   }
 
   private buildSlug(title: string, spotifyTrackId: string): string {
     return `${this.slugify(title)}-${spotifyTrackId.slice(0, 8)}`;
   }
 
+  private buildFallbackSlug(title: string, artistId: string): string {
+    return `${this.slugify(title)}-${artistId.slice(-6)}`;
+  }
+
   private slugify(value: string): string {
+    return slugify(value, { lower: true, strict: true, trim: true });
+  }
+
+  private normalizeTitle(value: string): string {
     return value
       .toLowerCase()
       .trim()
-      .replace(/['"]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/-{2,}/g, '-');
+      .replace(/\s*\(feat\.?.*?\)/gi, '')
+      .replace(/\s*\(ft\.?.*?\)/gi, '')
+      .replace(/\s*\[feat\.?.*?\]/gi, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }

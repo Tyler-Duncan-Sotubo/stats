@@ -18,10 +18,6 @@ export class SnapshotService {
     private readonly songScraperService: SongScraperService,
   ) {}
 
-  // ── Artist snapshots — called by daily cron ───────────────────────────
-  // Only writes artist-level totals (totalStreams, dailyStreams etc)
-  // Does NOT process songs — that's the weekly job's responsibility
-
   async snapshotAllArtists(): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
     const allArtists = await this.artistsRepository.findAllWithSpotifyId();
@@ -81,16 +77,10 @@ export class SnapshotService {
     );
   }
 
-  // ── Song snapshots — called by weekly cron ────────────────────────────
-  // Fetches full Kworb payload per artist and writes song-level snapshots
-  // Also upserts song records via findOrCreate (links spotifyTrackId etc)
-  // Runs weekly because song stream counts change more slowly than artist totals
-  // and Kworb song pages are heavier to scrape
-
   async snapshotAllSongs(): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
     const allArtists = await this.artistsRepository.findAllWithSpotifyId();
-    const batchSize = 3; // smaller batch — song pages are heavier
+    const batchSize = 3;
     let succeeded = 0;
     let failed = 0;
     let totalSongs = 0;
@@ -133,15 +123,13 @@ export class SnapshotService {
             `[Song snapshot] Failed ${artist.spotifyId}: ${reason}`,
           );
         } else {
-          if (result.status === 'fulfilled') {
-            totalSongs += result.value ?? 0;
-          }
+          totalSongs += result.value ?? 0;
           succeeded++;
         }
       }
 
       if (i + batchSize < allArtists.length) {
-        await this.sleep(6000); // slightly longer delay for song pages
+        await this.sleep(6000);
       }
     }
 
@@ -149,9 +137,6 @@ export class SnapshotService {
       `[Song snapshot] Complete — ${succeeded} artists, ${totalSongs} songs, ${failed} failed`,
     );
   }
-
-  // ── On-demand: single artist full snapshot (artist + songs) ──────────
-  // Used by controller for manual triggers
 
   async snapshotArtist(spotifyId: string): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
@@ -167,8 +152,6 @@ export class SnapshotService {
     await this.snapshotArtistTotalsOnly(a, today);
     await this.snapshotArtistSongs(a, today);
   }
-
-  // ── Private: artist totals only — no songs ────────────────────────────
 
   private async snapshotArtistTotalsOnly(
     artist: { id: string; spotifyId: string; name: string },
@@ -195,8 +178,6 @@ export class SnapshotService {
     );
   }
 
-  // ── Private: song snapshots for one artist ────────────────────────────
-
   private async snapshotArtistSongs(
     artist: { id: string; spotifyId: string; name: string },
     snapshotDate: string,
@@ -213,10 +194,9 @@ export class SnapshotService {
 
         await this.snapshotRepository.upsertSongSnapshot({
           songId: dbSong.id,
-          artistId: artist.id,
+          snapshotDate,
           spotifyStreams: song.streams,
           dailyStreams: song.dailyStreams,
-          snapshotDate,
         });
       }),
     );
@@ -227,8 +207,6 @@ export class SnapshotService {
 
     return payload.songs.length;
   }
-
-  // ── Helpers ───────────────────────────────────────────────────────────
 
   private normalizeKworbDate(value?: string | null): string | null {
     if (!value) return null;

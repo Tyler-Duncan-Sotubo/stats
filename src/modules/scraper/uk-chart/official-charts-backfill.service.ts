@@ -1,16 +1,9 @@
-// src/modules/backfill/services/official-charts-backfill.service.ts
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
-import {
-  artists,
-  songs,
-  chartEntries,
-  songFeatures,
-} from 'src/infrastructure/drizzle/schema';
-import { and, eq } from 'drizzle-orm';
-import slugify from 'slugify';
+import { chartEntries, songFeatures } from 'src/infrastructure/drizzle/schema';
+import { EntityResolutionService } from 'src/modules/catalog/entity-resolution.service';
 import * as cheerio from 'cheerio';
 
 type OfficialChartsEntry = {
@@ -33,9 +26,10 @@ export class OfficialChartsBackfillService {
   private readonly chartPath = 'singles-chart';
   private readonly chartId = '7501';
 
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
-
-  // ── Public entry point ────────────────────────────────────────────────
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly entityResolutionService: EntityResolutionService,
+  ) {}
 
   async run(
     job?: Job,
@@ -47,29 +41,9 @@ export class OfficialChartsBackfillService {
       chartId?: string;
     },
   ): Promise<{ dates: number; entries: number }> {
-    this.logger.log('Loading existing artists and songs into memory...');
-
     const chartPath = options?.chartPath ?? this.chartPath;
     const chartId = options?.chartId ?? this.chartId;
     const chartName = options?.chartName ?? 'uk_official_singles';
-
-    const [artistRows, songRows] = await Promise.all([
-      this.db.select().from(artists),
-      this.db.select().from(songs),
-    ]);
-
-    const artistByNorm = new Map<string, (typeof artistRows)[number]>();
-    for (const a of artistRows) {
-      artistByNorm.set(this.normalize(a.name), a);
-    }
-
-    const songByArtistTitle = new Map<string, (typeof songRows)[number]>();
-    const songByTitleOnly = new Map<string, (typeof songRows)[number]>();
-    for (const s of songRows) {
-      const tk = this.normalize(s.title);
-      songByArtistTitle.set(`${s.artistId}::${tk}`, s);
-      if (!songByTitleOnly.has(tk)) songByTitleOnly.set(tk, s);
-    }
 
     const dates = this.generateWeeklyDates(options);
     this.logger.log(`Found ${dates.length} UK chart dates to process`);
@@ -95,19 +69,26 @@ export class OfficialChartsBackfillService {
       for (const entry of chart.data) {
         const { primary, featured } = this.parseAllArtists(entry.artist);
 
-        const primaryArtist = await this.resolveArtist(primary, artistByNorm);
+        const primaryArtist = await this.entityResolutionService.resolveArtist({
+          name: primary,
+          source: 'official_charts',
+          allowCreate: true,
+          markProvisionalIfCreated: true,
+        });
+
         if (!primaryArtist) {
           this.logger.warn(`Could not resolve artist: "${primary}" — skipping`);
           continue;
         }
 
-        const song = await this.resolveSong(
-          primaryArtist.id,
-          entry.song,
-          primary,
-          songByArtistTitle,
-          songByTitleOnly,
-        );
+        const song = await this.entityResolutionService.resolveSong({
+          artistId: primaryArtist.id,
+          title: entry.song,
+          source: 'official_charts',
+          allowCreate: true,
+          markProvisionalIfCreated: true,
+        });
+
         if (!song) {
           this.logger.warn(
             `Could not resolve song: "${entry.song}" — skipping`,
@@ -116,16 +97,24 @@ export class OfficialChartsBackfillService {
         }
 
         for (const featuredName of featured) {
-          const featuredArtist = await this.resolveArtist(
-            featuredName,
-            artistByNorm,
-          );
-          if (!featuredArtist) continue;
-          if (featuredArtist.id === primaryArtist.id) continue;
+          const featuredArtist =
+            await this.entityResolutionService.resolveArtist({
+              name: featuredName,
+              source: 'official_charts',
+              allowCreate: true,
+              markProvisionalIfCreated: true,
+            });
+
+          if (!featuredArtist || featuredArtist.id === primaryArtist.id) {
+            continue;
+          }
 
           await this.db
             .insert(songFeatures)
-            .values({ songId: song.id, featuredArtistId: featuredArtist.id })
+            .values({
+              songId: song.id,
+              featuredArtistId: featuredArtist.id,
+            })
             .onConflictDoNothing();
         }
 
@@ -134,12 +123,13 @@ export class OfficialChartsBackfillService {
           .values({
             artistId: primaryArtist.id,
             songId: song.id,
-            chartName: chartName,
+            chartName,
             chartTerritory: 'UK',
             position: entry.this_week,
             peakPosition: entry.peak_position ?? null,
             weeksOnChart: entry.weeks_on_chart ?? null,
             chartWeek: date,
+            source: 'official_charts',
           })
           .onConflictDoNothing();
 
@@ -170,8 +160,6 @@ export class OfficialChartsBackfillService {
     return { dates: totalDates, entries: totalEntries };
   }
 
-  // ── Test single date — logs raw HTML + parsed result ──────────────────
-
   async testSingleDate(
     date: string,
     options?: { chartPath?: string; chartId?: string },
@@ -184,6 +172,7 @@ export class OfficialChartsBackfillService {
     const chartPath = options?.chartPath ?? this.chartPath;
     const chartId = options?.chartId ?? this.chartId;
     const url = this.buildChartUrl(date, chartPath, chartId);
+
     this.logger.log(`Testing UK chart fetch: ${url}`);
 
     const res = await fetch(url, {
@@ -201,176 +190,20 @@ export class OfficialChartsBackfillService {
     }
 
     const html = await res.text();
-
-    console.log('=== RAW HTML SAMPLE (first 3000 chars) ===');
-    console.log(html.slice(0, 3000));
-    console.log('=== END SAMPLE ===');
-
     const chart = this.parseChartHtml(html);
 
-    // Show cleaned song/artist AND how parseAllArtists splits each entry
     const parsed = chart.data.map((entry) => ({
-      position: entry.this_week,
-      song: entry.song,
-      artistRaw: entry.artist,
-      ...this.parseAllArtists(entry.artist),
+      primary: this.parseAllArtists(entry.artist).primary,
+      featured: this.parseAllArtists(entry.artist).featured,
     }));
-
-    console.log('=== PARSED ENTRIES ===');
-    console.log(JSON.stringify(parsed, null, 2));
-    console.log(`Total parsed: ${chart.data.length}`);
 
     return {
       url,
       entries: chart.data.length,
       data: chart.data,
-      parsed: parsed as any,
+      parsed,
     };
   }
-
-  // ── Artist resolution ─────────────────────────────────────────────────
-
-  private async resolveArtist(
-    name: string,
-    cache: Map<string, { id: string; name: string; slug: string }>,
-  ) {
-    const key = this.normalize(name);
-
-    const cached = cache.get(key);
-    if (cached) return cached;
-
-    const fuzzy = this.findFuzzyMatch(key, cache);
-    if (fuzzy) {
-      cache.set(key, fuzzy);
-      return fuzzy;
-    }
-    const cleanName = this.toTitleCase(name);
-    const slug = this.makeSlug(cleanName);
-
-    const [found] = await this.db
-      .select()
-      .from(artists)
-      .where(eq(artists.slug, slug))
-      .limit(1);
-
-    if (found) {
-      cache.set(key, found);
-      return found;
-    }
-
-    const [created] = await this.db
-      .insert(artists)
-      .values({
-        name: cleanName,
-        slug,
-        isAfrobeats: false,
-        isAfrobeatsOverride: false,
-      })
-      .onConflictDoUpdate({
-        target: artists.slug,
-        set: { name },
-      })
-      .returning();
-
-    if (created) cache.set(key, created);
-    return created ?? null;
-  }
-
-  // ── Song resolution ───────────────────────────────────────────────────
-
-  private async resolveSong(
-    artistId: string,
-    title: string,
-    artistName: string,
-    byArtistTitle: Map<string, { id: string }>,
-    byTitleOnly: Map<string, { id: string }>,
-  ) {
-    const titleKey = this.normalize(title);
-
-    const byBoth = byArtistTitle.get(`${artistId}::${titleKey}`);
-    if (byBoth) return byBoth;
-
-    const byTitle = byTitleOnly.get(titleKey);
-    if (byTitle) return byTitle;
-
-    const cleanTitle = this.toTitleCase(title);
-    const slug = this.makeSlug(`${artistName}-${cleanTitle}`);
-
-    const [found] = await this.db
-      .select()
-      .from(songs)
-      .where(and(eq(songs.artistId, artistId), eq(songs.slug, slug)))
-      .limit(1);
-
-    if (found) {
-      byArtistTitle.set(`${artistId}::${titleKey}`, found);
-      return found;
-    }
-
-    const [created] = await this.db
-      .insert(songs)
-      .values({
-        artistId,
-        title: cleanTitle,
-        slug,
-        isAfrobeats: false,
-        explicit: false,
-      })
-      .onConflictDoUpdate({
-        target: songs.slug,
-        set: { title: title.trim() },
-      })
-      .returning();
-
-    if (created) {
-      byArtistTitle.set(`${artistId}::${titleKey}`, created);
-      byTitleOnly.set(titleKey, created);
-    }
-
-    return created ?? null;
-  }
-
-  // ── Fuzzy matching ────────────────────────────────────────────────────
-
-  private findFuzzyMatch(
-    normName: string,
-    cache: Map<string, { id: string; name: string; slug: string }>,
-  ): { id: string; name: string; slug: string } | null {
-    if (normName.length < 10) return null;
-
-    for (const [key, artist] of cache.entries()) {
-      if (Math.abs(key.length - normName.length) > 3) continue;
-      if (this.levenshtein(normName, key) <= 2) {
-        this.logger.warn(
-          `Fuzzy matched "${normName}" → "${key}" (artist: "${artist.name}")`,
-        );
-        return artist;
-      }
-    }
-
-    return null;
-  }
-
-  private levenshtein(a: string, b: string): number {
-    const m = a.length;
-    const n = b.length;
-    const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-      Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-    );
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        dp[i][j] =
-          a[i - 1] === b[j - 1]
-            ? dp[i - 1][j - 1]
-            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-      }
-    }
-
-    return dp[m][n];
-  }
-
-  // ── HTML parsing ──────────────────────────────────────────────────────
 
   private async fetchChart(
     date: string,
@@ -415,8 +248,9 @@ export class OfficialChartsBackfillService {
             $el.find('.position, .chart-key, .chart-position').first().text(),
         );
 
-        if (!position || position < 1 || position > 100 || seen.has(position))
+        if (!position || position < 1 || position > 100 || seen.has(position)) {
           return;
+        }
 
         const rawTitle = this.cleanText(
           $el.find('h3, h4, .title, .chart-name, .track-title').first().text(),
@@ -435,12 +269,8 @@ export class OfficialChartsBackfillService {
 
         if (!rawTitle || !rawArtist) return;
 
-        // ── Fix 1: strip "New" prefix injected by Official Charts CMS ────
         const title = this.stripNewPrefix(rawTitle);
         const artist = this.stripNewPrefix(rawArtist);
-
-        // ── Fix 2: strip song title that bleeds into the artist field ─────
-        // e.g. title="REIN ME IN" artist="REIN ME INSAM FENDER & OLIVIA DEAN"
         const cleanArtist = this.stripTitleFromArtist(title, artist);
 
         if (!title || !cleanArtist) return;
@@ -470,20 +300,10 @@ export class OfficialChartsBackfillService {
     return { data: rows };
   }
 
-  // ── Artist string parsing ─────────────────────────────────────────────
-  // Separators:
-  //   "feat." / "ft." / "featuring"  → feature credit
-  //   "/"                            → equal collaboration
-  //   "&"                            → equal collaboration
-  //   ","                            → equal collaboration
-  //   "x"                            → collaboration
-  // All values lowercased then title-cased for consistent DB matching
-
   private parseAllArtists(raw: string): {
     primary: string;
     featured: string[];
   } {
-    // Title-case the raw string so it matches DB records
     const titleCased = raw
       .toLowerCase()
       .replace(/(^\w|\s\w)/g, (c) => c.toUpperCase());
@@ -499,19 +319,9 @@ export class OfficialChartsBackfillService {
     };
   }
 
-  // ── Strip "New" prefix injected by Official Charts CMS ───────────────
-  // "NewSWIM"               → "SWIM"
-  // "NewCLICK CLACK..."     → "CLICK CLACK..."
-  // "NewBODY TO BODY"       → "BODY TO BODY"
-
   private stripNewPrefix(value: string): string {
     return value.replace(/^New(?=[A-Z\s(])/, '').trim();
   }
-
-  // ── Strip song title prefix that bleeds into artist field ────────────
-  // title  = "REIN ME IN"
-  // artist = "REIN ME INSAM FENDER & OLIVIA DEAN"
-  // result = "SAM FENDER & OLIVIA DEAN"
 
   private stripTitleFromArtist(title: string, artist: string): string {
     const normTitle = title.toUpperCase().replace(/\s+/g, ' ').trim();
@@ -523,8 +333,6 @@ export class OfficialChartsBackfillService {
 
     return artist.trim();
   }
-
-  // ── Date generation ───────────────────────────────────────────────────
 
   private generateWeeklyDates(options?: {
     fromDate?: string;
@@ -569,22 +377,6 @@ export class OfficialChartsBackfillService {
     return `${this.baseUrl}/charts/${chartPath}/${yyyymmdd}/${chartId}/`;
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────
-
-  private normalize(value: string): string {
-    return value
-      .toLowerCase()
-      .trim()
-      .replace(/&/g, ' and ')
-      .replace(/feat\.?/gi, 'featuring')
-      .replace(/[^\p{L}\p{N}\s]/gu, '')
-      .replace(/\s+/g, ' ');
-  }
-
-  private makeSlug(value: string): string {
-    return slugify(value, { lower: true, strict: true, trim: true });
-  }
-
   private cleanText(value: string): string {
     return value.replace(/\s+/g, ' ').trim();
   }
@@ -597,19 +389,5 @@ export class OfficialChartsBackfillService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
-  }
-
-  private toTitleCase(value: string): string {
-    return value
-      .toLowerCase()
-      .split(' ')
-      .map((word) =>
-        word.length <= 2
-          ? word // keep "in", "of", "to" lowercase if you want
-          : word.charAt(0).toUpperCase() + word.slice(1),
-      )
-      .join(' ')
-      .replace(/\b(feat|ft|featuring)\b/gi, 'feat.')
-      .replace(/\b(And)\b/g, '&'); // optional stylistic
   }
 }

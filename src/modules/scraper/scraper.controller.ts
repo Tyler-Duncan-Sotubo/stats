@@ -5,7 +5,7 @@ import { SpotifyMetadataService } from './services/spotify-metadata.service';
 import { BillboardBackfillService } from './billboard/billboard-backfill.service';
 import { BillboardBackfillProducer } from './billboard/billboard-backfill.producer';
 import { OfficialChartsBackfillProducer } from './uk-chart/official-charts-backfill.producer';
-// import { BackfillRangeDto } from './dto/backfill-range.dto';
+import { BackfillRangeDto } from './dto/backfill-range.dto';
 import { OfficialChartsBackfillService } from './uk-chart/official-charts-backfill.service';
 import { DailyChartIngestionService } from './chart/daily-chart-ingestion.service';
 
@@ -52,10 +52,10 @@ export class ScraperController {
     return this.dailyChartIngestionService.runDailyIngestion();
   }
 
-  // @Post('billboard/produce')
-  // produce() {
-  //   return this.billboardProducer.enqueueFullBackfill();
-  // }
+  @Post('billboard/produce')
+  produce() {
+    return this.billboardProducer.enqueueFullBackfill();
+  }
 
   // @Post('official-charts')
   // enqueueOfficialCharts() {
@@ -64,13 +64,13 @@ export class ScraperController {
 
   // // POST /api/backfill/official-charts/range
   // // body: { "fromDate": "2024-01-01", "toDate": "2024-12-31" }
-  // @Post('official-charts/range')
-  // enqueueOfficialChartsRange(@Body() body: BackfillRangeDto) {
-  //   return this.officialChartsProducer.enqueueRangeBackfill(
-  //     body.fromDate,
-  //     body.toDate,
-  //   );
-  // }
+  @Post('official-charts/range')
+  enqueueOfficialChartsRange(@Body() body: BackfillRangeDto) {
+    return this.officialChartsProducer.enqueueRangeBackfill(
+      body.fromDate,
+      body.toDate,
+    );
+  }
 
   // @Get('test/uk-chart')
   // async testUkChart() {

@@ -1,12 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
 import {
-  songs,
   artistStatsSnapshots,
   songStatsSnapshots,
-  artists,
 } from 'src/infrastructure/drizzle/schema';
 
 @Injectable()
@@ -27,9 +25,6 @@ export class SnapshotRepository {
     dailyStreamsAsFeature?: number | null;
     trackCount?: number | null;
     sourceUpdatedAt?: string | null;
-    spotifyMonthlyListeners?: number | null;
-    spotifyFollowers?: number | null;
-    popularity?: number | null;
   }) {
     const [row] = await this.db
       .insert(artistStatsSnapshots)
@@ -45,9 +40,6 @@ export class SnapshotRepository {
         dailyStreamsAsFeature: data.dailyStreamsAsFeature ?? null,
         trackCount: data.trackCount ?? null,
         sourceUpdatedAt: data.sourceUpdatedAt ?? null,
-        spotifyMonthlyListeners: data.spotifyMonthlyListeners ?? null,
-        spotifyFollowers: data.spotifyFollowers ?? null,
-        popularity: data.popularity ?? null,
       } as typeof artistStatsSnapshots.$inferInsert)
       .onConflictDoUpdate({
         target: [
@@ -64,9 +56,6 @@ export class SnapshotRepository {
           dailyStreamsAsFeature: data.dailyStreamsAsFeature ?? null,
           trackCount: data.trackCount ?? null,
           sourceUpdatedAt: data.sourceUpdatedAt ?? null,
-          spotifyMonthlyListeners: data.spotifyMonthlyListeners ?? null,
-          spotifyFollowers: data.spotifyFollowers ?? null,
-          popularity: data.popularity ?? null,
         } as Partial<typeof artistStatsSnapshots.$inferInsert>,
       })
       .returning();
@@ -93,7 +82,6 @@ export class SnapshotRepository {
 
   async upsertSongSnapshot(data: {
     songId: string;
-    artistId: string;
     snapshotDate: string;
     spotifyStreams?: number | null;
     dailyStreams?: number | null;
@@ -102,7 +90,6 @@ export class SnapshotRepository {
       .insert(songStatsSnapshots)
       .values({
         songId: data.songId,
-        artistId: data.artistId,
         snapshotDate: data.snapshotDate,
         spotifyStreams: data.spotifyStreams ?? null,
         dailyStreams: data.dailyStreams ?? null,
@@ -132,93 +119,5 @@ export class SnapshotRepository {
       .limit(1);
 
     return row ?? null;
-  }
-
-  // ── Songs ─────────────────────────────────────────────────────────────
-
-  async upsertSong(data: {
-    artistId: string;
-    title: string;
-    spotifyTrackId: string;
-    isFeature?: boolean;
-    slug?: string;
-    albumId?: string | null;
-    releaseDate?: string | null;
-    durationMs?: number | null;
-    explicit?: boolean;
-    isAfrobeats?: boolean;
-    imageUrl?: string | null;
-  }) {
-    const slug =
-      data.slug ??
-      this.slugify(`${data.title}-${data.spotifyTrackId.slice(0, 8)}`);
-
-    const [row] = await this.db
-      .insert(songs)
-      .values({
-        artistId: data.artistId,
-        title: data.title,
-        spotifyTrackId: data.spotifyTrackId,
-        slug,
-        albumId: data.albumId ?? null,
-        releaseDate: data.releaseDate ?? null,
-        durationMs: data.durationMs ?? null,
-        explicit: data.explicit ?? false,
-        isAfrobeats: data.isAfrobeats ?? false,
-        imageUrl: data.imageUrl ?? null,
-      })
-      .onConflictDoUpdate({
-        target: songs.spotifyTrackId,
-        set: {
-          artistId: data.artistId,
-          title: data.title,
-        },
-      })
-      .returning();
-
-    return row;
-  }
-
-  async findSongBySpotifyTrackId(spotifyTrackId: string) {
-    const [row] = await this.db
-      .select()
-      .from(songs)
-      .where(eq(songs.spotifyTrackId, spotifyTrackId))
-      .limit(1);
-
-    return row ?? null;
-  }
-
-  // ── Artists ───────────────────────────────────────────────────────────
-  // Minimal artist queries needed by the snapshot pipeline.
-  // Full artist queries live in ArtistsRepository.
-
-  async findAllWithSpotifyId(): Promise<
-    { id: string; spotifyId: string; name: string }[]
-  > {
-    const rows = await this.db
-      .select({
-        id: artists.id,
-        spotifyId: artists.spotifyId,
-        name: artists.name,
-      })
-      .from(artists)
-      .where(isNotNull(artists.spotifyId));
-
-    return rows.filter(
-      (r): r is typeof r & { spotifyId: string } => r.spotifyId !== null,
-    );
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────
-
-  private slugify(value: string): string {
-    return value
-      .toLowerCase()
-      .trim()
-      .replace(/['"]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/-{2,}/g, '-');
   }
 }

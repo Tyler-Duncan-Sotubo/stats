@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1776061139057,
-      "tag": "0000_mean_grey_gargoyle",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1776101590207,
-      "tag": "0001_robust_monster_badoon",
+      "when": 1776125124217,
+      "tag": "0000_safe_thanos",
       "breakpoints": true
     }
   ]

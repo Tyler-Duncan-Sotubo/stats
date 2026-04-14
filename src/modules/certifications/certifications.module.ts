@@ -8,6 +8,7 @@ import { RiaaCertificationService } from '../scraper/services/riaa-certification
 import { ArtistsModule } from '../artists/artists.module';
 import { CertificationsScheduler } from './certifications.scheduler';
 import { SongsRepository } from '../songs/songs.repository';
+import { EntityResolutionService } from '../catalog/entity-resolution.service';
 
 @Module({
   imports: [ArtistsModule],
@@ -18,6 +19,7 @@ import { SongsRepository } from '../songs/songs.repository';
     RiaaCertificationService,
     CertificationsScheduler,
     SongsRepository,
+    EntityResolutionService,
   ],
   exports: [CertificationsService],
 })

@@ -15,14 +15,9 @@ export class ArtistsService {
     private readonly spotifyMetadata: SpotifyMetadataService,
   ) {}
 
-  // ── Discovery pipeline ────────────────────────────────────────────────
-
-  // artists.service.ts
-
   async seedFromDiscovery(discovered: DiscoveredArtist[]): Promise<void> {
     if (!discovered.length) return;
 
-    // Load everything we need in one shot
     const existingArtists = await this.artistsRepository.findAllBasic();
 
     const bySpotifyId = new Map(
@@ -30,36 +25,32 @@ export class ArtistsService {
     );
 
     const byNormName = new Map(
-      existingArtists.map((a) => [this.normaliseName(a.name), a]),
+      existingArtists.map((a) => [a.normalizedName, a]),
     );
 
     const bySlug = new Map(existingArtists.map((a) => [a.slug, a]));
 
     const toCreate: { name: string; spotifyId: string; slug: string }[] = [];
-    const toEnrich: { id: string; spotifyId: string }[] = []; // existing artist needs spotifyId added
+    const toEnrich: { id: string; spotifyId: string }[] = [];
 
     for (const artist of discovered) {
       const normName = this.normaliseName(artist.name);
       const slug = this.buildSlug(artist.name);
 
-      // Case 1 — already have this Spotify ID → skip entirely
       if (bySpotifyId.has(artist.spotifyId)) continue;
 
-      // Case 2 — artist exists by name but has no Spotify ID yet
-      // (was seeded by Billboard backfill) → update with Spotify ID
       const existingByName = byNormName.get(normName) || bySlug.get(slug);
+
       if (existingByName && !existingByName.spotifyId) {
         toEnrich.push({ id: existingByName.id, spotifyId: artist.spotifyId });
         continue;
       }
 
-      // Case 3 — genuinely new artist not in DB at all → create
       if (!existingByName) {
         toCreate.push({ name: artist.name, spotifyId: artist.spotifyId, slug });
       }
     }
 
-    // Apply enrichment updates — add spotifyId to Billboard-seeded artists
     if (toEnrich.length) {
       await Promise.all(
         toEnrich.map(({ id, spotifyId }) =>
@@ -71,7 +62,6 @@ export class ArtistsService {
       );
     }
 
-    // Create genuinely new artists
     if (toCreate.length) {
       await this.artistsRepository.upsertManyDiscovered(toCreate);
       this.logger.log(
@@ -92,8 +82,6 @@ export class ArtistsService {
       return;
     }
 
-    // filter out artists that don't have a spotifyId yet
-    // (e.g. billboard-only artists waiting to be matched)
     const withSpotifyId = unenriched
       .map((a) => a.spotifyId)
       .filter((id): id is string => id !== null);
@@ -115,9 +103,14 @@ export class ArtistsService {
 
     const rows = metadata.map((m) => ({
       name: m.name,
+      normalizedName: this.normaliseName(m.name),
+      canonicalName: m.name,
       spotifyId: m.spotifyId,
       slug: this.buildSlug(m.name),
       imageUrl: m.imageUrl,
+      sourceOfTruth: 'spotify',
+      entityStatus: 'canonical' as const,
+      needsReview: false,
     }));
 
     const upserted = await this.artistsRepository.upsertManyBySpotifyId(rows);
@@ -129,13 +122,10 @@ export class ArtistsService {
     return this.artistsRepository.findBySpotifyId(spotifyId);
   }
 
-  // ── Dashboard: create ─────────────────────────────────────────────────
-  // For manually adding an artist that hasn't been discovered via Kworb yet.
-  // Fetches image from Spotify immediately.
   async create(dto: CreateArtistInput) {
     const slug = this.buildSlug(dto.name);
+    const normalizedName = this.normaliseName(dto.name);
 
-    // pull image from Spotify if we can
     let imageUrl: string | null = null;
     try {
       const meta = await this.spotifyMetadata.fetchArtistMetadata(
@@ -150,6 +140,8 @@ export class ArtistsService {
 
     return this.artistsRepository.upsertBySpotifyId({
       name: dto.name,
+      normalizedName,
+      canonicalName: dto.name,
       spotifyId: dto.spotifyId,
       slug,
       imageUrl,
@@ -158,12 +150,11 @@ export class ArtistsService {
       bio: dto.bio ?? null,
       isAfrobeats: dto.isAfrobeats ?? false,
       isAfrobeatsOverride: dto.isAfrobeatsOverride ?? false,
+      sourceOfTruth: 'manual',
+      entityStatus: 'canonical',
+      needsReview: false,
     });
   }
-
-  // ── Dashboard: update ─────────────────────────────────────────────────
-  // Partial update by DB id — only touches fields explicitly passed in.
-  // This is what the dashboard calls when an editor fills in the form.
 
   async update(id: string, dto: UpdateArtistInput) {
     const existing = await this.artistsRepository.findById(id);
@@ -171,21 +162,27 @@ export class ArtistsService {
       throw new NotFoundException(`Artist with id=${id} not found`);
     }
 
-    // rebuild slug only if name changed
     const slug =
       dto.name && dto.name !== existing.name
         ? this.buildSlug(dto.name)
         : undefined;
 
+    const normalizedName =
+      dto.name && dto.name !== existing.name
+        ? this.normaliseName(dto.name)
+        : undefined;
+
+    const canonicalName =
+      dto.name && dto.name !== existing.name ? dto.name : undefined;
+
     return this.artistsRepository.updateById(id, {
       ...dto,
       ...(slug ? { slug } : {}),
+      ...(normalizedName ? { normalizedName } : {}),
+      ...(canonicalName ? { canonicalName } : {}),
     });
   }
 
-  // ── Dashboard: upsert by spotifyId ───────────────────────────────────
-  // Useful when the dashboard imports an artist by Spotify URL —
-  // creates if not exists, updates editorial fields if it does.
   async upsertFromDashboard(spotifyId: string, dto: UpdateArtistInput) {
     const existing = await this.artistsRepository.findBySpotifyId(spotifyId);
 
@@ -193,23 +190,26 @@ export class ArtistsService {
       return this.update(existing.id, dto);
     }
 
-    // not in DB yet — fetch name + image from Spotify and create
     const meta = await this.spotifyMetadata.fetchArtistMetadata(spotifyId);
+    const name = dto.name ?? meta.name;
 
     return this.artistsRepository.upsertBySpotifyId({
-      name: dto.name ?? meta.name,
+      name,
+      normalizedName: this.normaliseName(name),
+      canonicalName: name,
       spotifyId,
-      slug: this.buildSlug(dto.name ?? meta.name),
+      slug: this.buildSlug(name),
       imageUrl: dto.imageUrl ?? meta.imageUrl,
       originCountry: dto.originCountry ?? null,
       debutYear: dto.debutYear ?? null,
       bio: dto.bio ?? null,
       isAfrobeats: dto.isAfrobeats ?? false,
       isAfrobeatsOverride: dto.isAfrobeatsOverride ?? false,
+      sourceOfTruth: 'manual',
+      entityStatus: 'canonical',
+      needsReview: false,
     });
   }
-
-  // ── Lookups ───────────────────────────────────────────────────────────
 
   async findBySlug(slug: string) {
     return this.artistsRepository.findBySlug(slug);
@@ -223,8 +223,6 @@ export class ArtistsService {
     return this.artistsRepository.findBySpotifyId(spotifyId);
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────
-
   private buildSlug(name: string): string {
     const result = slugify(name, { lower: true, strict: true });
     if (typeof result === 'string') return result;
@@ -234,12 +232,12 @@ export class ArtistsService {
   private normaliseName(value: string): string {
     return value
       .toLowerCase()
-      .normalize('NFD') // split accents
-      .replace(/[\u0300-\u036f]/g, '') // remove accents
-      .replace(/&/g, 'and') // standardise &
-      .replace(/['"]/g, '') // remove quotes
-      .replace(/[^a-z0-9\s]/g, ' ') // remove punctuation
-      .replace(/\s+/g, ' ') // collapse whitespace
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/&/g, 'and')
+      .replace(/['"]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 }

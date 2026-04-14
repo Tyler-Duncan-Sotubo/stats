@@ -13,6 +13,7 @@ import { OfficialChartsBackfillProcessor } from './uk-chart/official-charts-back
 import { OfficialChartsBackfillService } from './uk-chart/official-charts-backfill.service';
 import { DailyChartIngestionService } from './chart/daily-chart-ingestion.service';
 import { SpotifyDailyService } from './chart/spotify-daily.service';
+import { EntityResolutionService } from '../catalog/entity-resolution.service';
 
 @Module({
   // scraper.module.ts
@@ -36,6 +37,7 @@ import { SpotifyDailyService } from './chart/spotify-daily.service';
     OfficialChartsBackfillService,
     DailyChartIngestionService,
     SpotifyDailyService,
+    EntityResolutionService,
   ],
   exports: [
     KworbArtistDiscoveryService,

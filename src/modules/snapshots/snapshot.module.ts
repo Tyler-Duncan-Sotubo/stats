@@ -8,6 +8,7 @@ import { SnapshotCron } from './snapshot.cron';
 import { SongsRepository } from '../songs/songs.repository';
 import { AlbumsModule } from '../albums/albums.module';
 import { SongScraperService } from '../songs/song-scraper.service';
+import { EntityResolutionService } from '../catalog/entity-resolution.service';
 
 @Module({
   imports: [ScraperModule, ArtistsModule, AlbumsModule],
@@ -18,6 +19,7 @@ import { SongScraperService } from '../songs/song-scraper.service';
     SnapshotCron,
     SongScraperService,
     SongsRepository,
+    EntityResolutionService,
   ],
 })
 export class SnapshotModule {}
