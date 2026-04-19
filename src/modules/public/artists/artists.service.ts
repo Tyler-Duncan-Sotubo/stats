@@ -40,14 +40,21 @@ export class ArtistsService {
 
         if (!artist) throw new NotFoundException(`Artist "${slug}" not found`);
 
-        const [certifications, charts, records, awards, topSongs] =
-          await Promise.all([
-            this.artistsRepository.getCertifications(artist.id),
-            this.artistsRepository.getCharts(artist.id),
-            this.artistsRepository.getRecords(artist.id),
-            this.artistsRepository.getAwards(artist.id),
-            this.artistsRepository.getTopSongs(artist.id),
-          ]);
+        const [
+          certifications,
+          charts,
+          records,
+          awards,
+          topSongs,
+          awardsSummary,
+        ] = await Promise.all([
+          this.artistsRepository.getCertifications(artist.id),
+          this.artistsRepository.getCharts(artist.id),
+          this.artistsRepository.getRecords(artist.id),
+          this.artistsRepository.getAwards(artist.id),
+          this.artistsRepository.getTopSongs(artist.id),
+          this.artistsRepository.getAwardsSummary(artist.id),
+        ]);
 
         return {
           ...artist,
@@ -56,6 +63,7 @@ export class ArtistsService {
           records,
           awards,
           topSongs,
+          awardsSummary,
         };
       },
     );

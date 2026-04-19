@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { SongsService } from './songs.service';
 
 @Controller('public/songs')
@@ -17,5 +17,13 @@ export class SongsController {
   @Get('indexable')
   async getIndexableSongs() {
     return this.songsService.getIndexableSongs();
+  }
+
+  @Get('search')
+  async searchSong(
+    @Query('title') title: string,
+    @Query('artistName') artistName?: string,
+  ) {
+    return this.songsService.searchSong(title, artistName);
   }
 }

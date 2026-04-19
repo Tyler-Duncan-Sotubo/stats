@@ -9,6 +9,7 @@ import { ArtistsService } from '../artists/artists.service';
 import { ChartsService } from '../charts/charts.service';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { AskRepository } from 'src/modules/public/ask/ask.repository';
+import { SongsService } from '../songs/songs.service';
 
 export interface AskResult {
   answer: string;
@@ -17,10 +18,37 @@ export interface AskResult {
   slug: string | null;
 }
 
-const TOOL_SYSTEM_PROMPT = `You are a data assistant for tooXclusive Stats, a music statistics platform.
+const TOOL_SYSTEM_PROMPT = `You are a data assistant for TooXclusive Stats, a music statistics platform.
 All stream counts are Spotify only.
 Pick the most relevant tool to answer the user's question.
-If a question mentions a specific artist by name, use get_artist with their slug.
+
+ARTIST ROUTING RULES:
+- If the question mentions a specific artist by name → ALWAYS use get_artist with their slug
+- Short queries like "[artist] streams", "[artist] monthly listeners", "[artist] daily streams" → use get_artist
+- Examples: "rema monthly listeners" → get_artist slug=rema, "wizkid streams" → get_artist slug=wizkid
+- "[artist] uk chart history" → get_artist slug=[artist]
+- "[artist] total streams" → get_artist slug=[artist]
+- "[artist] grammy nominations/wins" → get_artist slug=[artist]
+- "has [artist] won a grammy" → get_artist slug=[artist]
+- "has [artist] hit X billion streams" → get_artist slug=[artist]
+
+SONG ROUTING RULES:
+- "how many streams does [song] have" → use get_song with title=[song]
+- "how many streams does [song] by [artist] have" → use get_song with title=[song] artistName=[artist]
+- "streams for [song]" → use get_song
+- "[song] streams" where no artist name is present → use get_song
+- "most streamed song ever" / "most streamed song overall" → use get_leaderboard_songs
+- "top songs" / "biggest songs on spotify" → use get_leaderboard_songs
+- "trending songs" / "fastest growing songs" → use get_trending_songs
+
+AFROBEATS / AFRICAN RULES — CRITICAL:
+- "african artist", "african artists", "african music" → ALWAYS set isAfrobeats=true, NO EXCEPTIONS
+- "afrobeats artist", "afrobeats song" → ALWAYS set isAfrobeats=true
+- "most popular african artist" → get_leaderboard_streams isAfrobeats=true
+- "biggest african artist" → get_leaderboard_streams isAfrobeats=true
+- "which african artist has X streams" → get_leaderboard_streams isAfrobeats=true
+- "nigerian artist", "ghanaian artist" etc → set country only, do NOT set isAfrobeats
+- NEVER return global leaderboard for african/afrobeats questions
 
 Country code mapping — use these exact codes:
 - Nigeria / Nigerian → NG
@@ -53,30 +81,50 @@ Chart name mapping — use these exact chartName values:
 
 Rules for parameters:
 - Set country using the mapping above when the user mentions a nationality or country
-- NEVER set isAfrobeats unless the user explicitly says "Afrobeats"
 - NEVER set country unless the user mentions a country or nationality
 - ALWAYS set limit to 10 unless the user asks for a specific number like "top 5" or "top 3"
 - For chart questions always include the chartName from the mapping above and the correct territory`;
 
-const ANSWER_SYSTEM_PROMPT = `You are tooXclusive Stats, a music statistics platform.
+const ANSWER_SYSTEM_PROMPT = `You are TooXclusive Stats, a music statistics platform.
 You MUST answer using ONLY the data provided. Never use your training knowledge for statistics.
 Answer in one confident sentence — direct, specific, with the key number prominent.
 All stream counts are Spotify only — always mention this.
 Never reference a date. Never say "as of". Never add caveats. No markdown.
 
 Field reference — use these fields for these question types:
-- "most streamed" → totalStreams
-- "most listeners" → monthlyListeners
-- "growing fastest" / "trending" → dailyGrowth (highest value = fastest growing)
+- "most streamed" / "total streams" → totalStreams
+- "most listeners" / "monthly listeners" → monthlyListeners
 - "daily streams" → dailyStreams
-- chart questions → ALWAYS use songTitle for the song name and artistName for the artist
-- NEVER confuse artistName with the song — the song is always songTitle
+- "growing fastest" / "trending" → dailyGrowth (highest value = fastest growing)
+- chart questions → ALWAYS use songTitle for the song name, NEVER artistName as the song
 - For "who is #1" or "what is #1" → answer with songTitle by artistName at position 1
-- For chart list questions, list the top 5 as: "1. {songTitle} - {artistName}, 2. ..." format
-- The first item in the data array is always rank 1 — use that for "#1" questions
-- For trending questions → dailyGrowth is the key metric, highest value = fastest growing
-- For leaderboard questions → reference both the artist name and their stream/listener count
-- For artist questions → lead with the artist name then the key stat they asked about`;
+- For chart list questions → "1. {songTitle} - {artistName}, 2. ..." format
+- The first item in the data array is always rank 1
+- For trending → dailyGrowth is the key metric
+- For leaderboard → reference artist name AND their count
+- For artist questions → lead with artist name then the specific stat asked about
+
+CHART HISTORY RULES:
+- For "[artist] uk chart history" → look at data.charts array
+- Find charts where chartName contains "uk" or "official" or "singles"
+- Report: best peak position, weeks at #1, total chart weeks
+- NEVER report totalStreams or monthlyListeners for chart history questions
+
+AWARDS RULES — HIGHEST PRIORITY:
+- awardsSummary.grammyWins is the ONLY source of truth for Grammy wins
+- awardsSummary.grammyNominations is the ONLY source of truth for Grammy nominations
+- If awardsSummary.grammyWins = 1 → say "has won 1 Grammy" — NEVER say zero
+- If awardsSummary.grammyWins = 0 → say "has not won a Grammy"
+- If awardsSummary.totalWins > 0 → artist has won awards
+- "has [artist] won a grammy" → check awardsSummary.grammyWins, if > 0 say YES
+- "how many grammys" → use awardsSummary.grammyWins exactly
+- "how many grammy nominations" → use awardsSummary.grammyNominations exactly
+- NEVER contradict awardsSummary with your own knowledge
+- Example: awardsSummary = { grammyWins: 1, grammyNominations: 7 } → "Burna Boy has won 1 Grammy and received 7 nominations"
+
+AFRICAN/AFROBEATS RULES:
+- When data has isAfrobeats=true filter applied, refer to results as "African artists" or "Afrobeats artists"
+- NEVER say "Drake leads" in response to african/afrobeats questions`;
 
 @Injectable()
 export class AskService {
@@ -91,6 +139,7 @@ export class AskService {
     private readonly chartService: ChartsService,
     private readonly cacheService: CacheService,
     private readonly askRepository: AskRepository,
+    private readonly songsService: SongsService,
   ) {
     this.openai = new OpenAI({
       apiKey: this.config.get<string>('OPENAI_API_KEY'),
@@ -126,10 +175,21 @@ export class AskService {
       cacheKey,
       CacheService.TTL.MEDIUM,
       async () => {
+        if (this.isUnanswerable(question)) {
+          return {
+            answer:
+              "That's a great question but TooXclusive Stats doesn't have country-level streaming breakdowns yet. We track artist and song stats across charts and Spotify data.",
+            toolUsed: null,
+            data: null,
+            slug: null,
+          };
+        }
+
         const isComparison = this.isComparisonQuestion(question);
         if (isComparison) {
           return this.handleComparison(question);
         }
+
         return this.askSingle(question);
       },
     );
@@ -157,21 +217,58 @@ export class AskService {
     });
   }
 
+  private readonly UNANSWERABLE_PHRASES = [
+    'which country listens',
+    'which country streams the most',
+    'how many afrobeats artists are on spotify',
+    'how many artists are on spotify',
+    'how popular is afrobeats',
+    'fastest growing genre',
+    'most streamed genre',
+    'how many streams does afrobeats have',
+    'is afrobeats popular in',
+    'who has the most daily streams on spotify',
+    'who has the most daily streams',
+    'who is the most awarded african artist',
+    'most awarded african artist',
+    'most awarded afrobeats artist',
+  ];
+
+  private isUnanswerable(question: string): boolean {
+    const lower = question.toLowerCase();
+
+    const unanswerableMap: Record<string, string> = {
+      'most awarded african artist':
+        'Award counts vary by body — TooXclusive Stats tracks individual awards but does not currently rank artists by total wins.',
+      'most awarded afrobeats artist':
+        'Award counts vary by body — TooXclusive Stats tracks individual awards but does not currently rank artists by total wins.',
+    };
+
+    for (const phrase of Object.keys(unanswerableMap)) {
+      if (lower.includes(phrase)) {
+        return true;
+      }
+    }
+
+    return this.UNANSWERABLE_PHRASES.some((phrase) => lower.includes(phrase));
+  }
+
   private isComparisonQuestion(question: string): boolean {
     const lower = question.toLowerCase();
     return (
-      lower.includes(' vs ') ||
-      lower.includes(' versus ') ||
-      lower.includes(' or ') ||
+      /\b(.+?)\s+vs\s+(.+?)\b/i.test(lower) ||
+      /\b(.+?)\s+versus\s+(.+?)\b/i.test(lower) ||
+      /\bcompare\s+(.+?)\s+and\s+(.+?)\b/i.test(lower) ||
+      /\bis\s+(.+?)\s+bigger\s+than\s+(.+?)\b/i.test(lower) ||
       lower.includes('more than') ||
-      lower.includes('compared to') ||
-      lower.includes('compare')
+      lower.includes('compared to')
     );
   }
 
   private async handleComparison(question: string): Promise<AskResult> {
     const slugResponse = await this.openai.chat.completions.create({
       model: 'gpt-4o-mini',
+      max_tokens: 100,
       messages: [
         {
           role: 'system',
@@ -221,59 +318,41 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
     }
 
     return {
-      answer: `Comparing ${data1.name} and ${data2.name} on AfroStats.`,
+      answer: `Comparing ${data1.name} and ${data2.name} on TooXclusive Stats.`,
       toolUsed: 'get_artist:comparison',
       data: { artist1: data1, artist2: data2 },
       slug: data1.slug ?? null,
     };
   }
 
-  private readonly UNANSWERABLE_PHRASES = [
-    'which country listens',
-    'which country streams the most',
-    'how many afrobeats artists are on spotify',
-    'how many artists are on spotify',
-    'how popular is afrobeats',
-    'fastest growing genre',
-    'most streamed genre',
-    'how many streams does afrobeats have',
-    'is afrobeats popular in',
-  ];
-
-  private isUnanswerable(question: string): boolean {
-    const lower = question.toLowerCase();
-    return this.UNANSWERABLE_PHRASES.some((phrase) => lower.includes(phrase));
-  }
-
   private async askSingle(question: string): Promise<AskResult> {
-    // Guard — questions we can't answer with available data
-    if (this.isUnanswerable(question)) {
-      return {
-        answer:
-          "That's a great question but we doesn't have country-level streaming breakdowns yet. We track artist and song stats across charts and Spotify data.",
-        toolUsed: null,
-        data: null,
-        slug: null,
-      };
-    }
+    const lower = question.toLowerCase();
 
-    // Step 1 — let OpenAI pick the right tool + params
+    // ── Pre-process: inject isAfrobeats context into params ──
+    const forceAfrobeats = this.isAfricaQuestion(lower);
+
     const toolResponse = await this.openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 100,
+      max_tokens: 150,
       messages: [
         { role: 'system', content: TOOL_SYSTEM_PROMPT },
-        { role: 'user', content: question },
+        {
+          role: 'user',
+          content: forceAfrobeats
+            ? `${question}\n\n[SYSTEM: This question is about African/Afrobeats artists. You MUST set isAfrobeats=true in your tool call.]`
+            : question,
+        },
       ],
       tools: ASK_TOOLS,
-      tool_choice: 'required',
+      tool_choice: 'auto',
     });
 
     const toolCall = toolResponse.choices[0]?.message?.tool_calls?.[0];
 
     if (!toolCall || toolCall.type !== 'function') {
       return {
-        answer: "I couldn't find relevant data for that question.",
+        answer:
+          "TooXclusive Stats couldn't find relevant data for that question.",
         toolUsed: null,
         data: null,
         slug: null,
@@ -283,11 +362,23 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
     const toolName = toolCall.function.name;
     const params = JSON.parse(toolCall.function.arguments);
 
+    // ── Force isAfrobeats in code — don't trust the LLM ──
+    if (
+      forceAfrobeats &&
+      [
+        'get_leaderboard_streams',
+        'get_leaderboard_listeners',
+        'get_trending_artists',
+      ].includes(toolName)
+    ) {
+      params.isAfrobeats = true;
+    }
+
     this.logger.log(
       `Tool selected: ${toolName} with params: ${JSON.stringify(params)}`,
     );
 
-    // Step 2 — call the right internal service
+    // rest of the method stays the same...
     const data = await this.callService(toolName, params);
 
     if (!data) {
@@ -299,7 +390,6 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
       };
     }
 
-    // Step 3 — format answer locally for predictable shapes, OpenAI for complex ones
     const answer =
       this.formatAnswer(toolName, question, data) ??
       (await this.generateAnswer(question, toolName, data));
@@ -309,19 +399,56 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
     return { answer, toolUsed: toolName, data, slug };
   }
 
-  // Fast local formatting — no OpenAI call needed for predictable shapes
+  private isAfricaQuestion(lower: string): boolean {
+    return (
+      lower.includes('african artist') ||
+      lower.includes('african artists') ||
+      lower.includes('african music') ||
+      lower.includes('afrobeats artist') ||
+      lower.includes('afrobeats artists') ||
+      lower.includes('afrobeats song') ||
+      lower.includes('afrobeats songs') ||
+      lower.includes('biggest african') ||
+      lower.includes('most streamed african') ||
+      lower.includes('most popular african') ||
+      lower.includes('top african') ||
+      lower.includes('best african') ||
+      lower.includes('king of afrobeats') ||
+      lower.includes('queen of afrobeats') ||
+      lower.includes('number 1 afrobeats') ||
+      lower.includes('best afrobeats') ||
+      lower.includes('biggest afrobeats') ||
+      lower.includes('fastest growing african') ||
+      lower.includes('trending african')
+    );
+  }
+
   private formatAnswer(
     toolName: string,
     question: string,
     data: any,
   ): string | null {
+    const topNMatch = question.match(/top\s*(\d+)/i);
+    const topN = topNMatch ? parseInt(topNMatch[1]) : null;
+    const isListQuestion =
+      topN !== null || /\b(list|top|best|biggest)\b/i.test(question);
+    const isAfrican = /african|afrobeats/i.test(question);
+    const label = isAfrican ? 'African artists' : 'artists';
+
     switch (toolName) {
+      case 'get_song': {
+        if (!data) return 'No stream data found for that song.';
+        return `"${data.title}" by ${data.artistName} has ${Number(data.totalStreams).toLocaleString()} Spotify streams.`;
+      }
+
       case 'get_chart': {
         const top = data.data?.[0];
         if (!top) return 'No chart data found.';
         const chartLabel = data.chartName.replace(/_/g, ' ');
         const isTopQuestion =
-          /\b(#1|number 1|top|who is|what is|topping)\b/i.test(question);
+          /\b(#1|number 1|top|who is|what is|topping|leading)\b/i.test(
+            question,
+          );
         if (isTopQuestion) {
           return `"${top.songTitle}" by ${top.artistName} is #1 on the ${chartLabel} chart.`;
         }
@@ -335,41 +462,95 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
       case 'get_leaderboard_streams': {
         const top = data.data?.[0];
         if (!top) return 'No leaderboard data found.';
+        if (isListQuestion) {
+          const count = Math.min(topN ?? 5, 10);
+          const list = data.data
+            ?.slice(0, count)
+            .map(
+              (a: any, i: number) =>
+                `${i + 1}. ${a.artistName} (${Number(a.totalStreams).toLocaleString()})`,
+            )
+            .join(', ');
+          return `Top ${count} most streamed ${label} on Spotify: ${list}.`;
+        }
         return `${top.artistName} leads with ${Number(top.totalStreams).toLocaleString()} Spotify streams.`;
       }
 
       case 'get_leaderboard_listeners': {
         const top = data.data?.[0];
         if (!top) return 'No leaderboard data found.';
+        if (isListQuestion) {
+          const count = Math.min(topN ?? 5, 10);
+          const list = data.data
+            ?.slice(0, count)
+            .map(
+              (a: any, i: number) =>
+                `${i + 1}. ${a.artistName} (${Number(a.monthlyListeners).toLocaleString()})`,
+            )
+            .join(', ');
+          return `Top ${count} ${label} by monthly listeners on Spotify: ${list}.`;
+        }
         return `${top.artistName} has the most monthly listeners with ${Number(top.monthlyListeners).toLocaleString()} on Spotify.`;
       }
 
       case 'get_leaderboard_songs': {
         const top = data.data?.[0];
         if (!top) return 'No leaderboard data found.';
-        const title = top.songTitle ?? top.title; // ← try both
+        const title = top.songTitle ?? top.title;
+        if (isListQuestion) {
+          const count = Math.min(topN ?? 5, 10);
+          const list = data.data
+            ?.slice(0, count)
+            .map(
+              (a: any, i: number) =>
+                `${i + 1}. ${a.songTitle ?? a.title} by ${a.artistName} (${Number(a.totalStreams).toLocaleString()})`,
+            )
+            .join(', ');
+          return `Top ${count} most streamed songs on Spotify: ${list}.`;
+        }
         return `"${title}" by ${top.artistName} is the most streamed song with ${Number(top.totalStreams).toLocaleString()} Spotify streams.`;
       }
 
       case 'get_trending_artists': {
         const top = data.data?.[0];
         if (!top) return 'No trending data found.';
+        if (isListQuestion) {
+          const count = Math.min(topN ?? 5, 10);
+          const list = data.data
+            ?.slice(0, count)
+            .map(
+              (a: any, i: number) =>
+                `${i + 1}. ${a.name} (+${Number(a.dailyGrowth).toLocaleString()})`,
+            )
+            .join(', ');
+          return `Top ${count} trending ${label} on Spotify by daily growth: ${list}.`;
+        }
         return `${top.name} is the fastest growing artist with +${Number(top.dailyGrowth).toLocaleString()} daily Spotify stream growth.`;
       }
 
       case 'get_trending_songs': {
         const top = data.data?.[0];
         if (!top) return 'No trending data found.';
+        if (isListQuestion) {
+          const count = Math.min(topN ?? 5, 10);
+          const list = data.data
+            ?.slice(0, count)
+            .map(
+              (a: any, i: number) =>
+                `${i + 1}. ${a.title} by ${a.artistName} (+${Number(a.dailyGrowth).toLocaleString()})`,
+            )
+            .join(', ');
+          return `Top ${count} trending songs on Spotify: ${list}.`;
+        }
         return `"${top.title}" by ${top.artistName} is trending fastest with +${Number(top.dailyGrowth).toLocaleString()} daily Spotify streams.`;
       }
 
-      // get_artist and search_artists need OpenAI — fall through
+      // get_artist needs OpenAI — fall through
       default:
         return null;
     }
   }
 
-  // Only called for complex cases like get_artist and search_artists
   private async generateAnswer(
     question: string,
     toolName: string,
@@ -377,6 +558,7 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
   ): Promise<string> {
     const answerResponse = await this.openai.chat.completions.create({
       model: 'gpt-4o-mini',
+      max_tokens: 150,
       messages: [
         { role: 'system', content: ANSWER_SYSTEM_PROMPT },
         { role: 'user', content: question },
@@ -396,6 +578,9 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
     switch (toolName) {
       case 'get_artist':
         return this.artistService.getBySlug(params.slug);
+
+      case 'get_song':
+        return this.songsService.searchSong(params.title, params.artistName);
 
       case 'get_leaderboard_streams':
         return this.leaderboardService.getStreams({
@@ -430,21 +615,20 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
           isAfrobeats: params.isAfrobeats,
         });
 
-      case 'get_chart':
+      case 'get_chart': {
+        const territory =
+          params.territory ?? this.inferTerritory(params.chartName);
+        // Normalize — some charts use UK not GB
+        const normalizedTerritory = this.normalizeTerritory(
+          params.chartName,
+          territory,
+        );
         return this.chartService.getChart(
           params.chartName,
-          params.territory ?? this.inferTerritory(params.chartName),
+          normalizedTerritory,
           params.limit ?? 20,
         );
-
-      case 'search_artists':
-        return this.artistService.browse({
-          letter: params.letter,
-          country: params.country,
-          sortBy: params.sortBy ?? 'totalStreams',
-          limit: params.limit ?? 10,
-          page: 1,
-        });
+      }
 
       default:
         this.logger.warn(`Unknown tool: ${toolName}`);
@@ -463,19 +647,21 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
           monthlyListeners: data.monthlyListeners,
           dailyStreams: data.dailyStreams,
           trackCount: data.trackCount,
+          // ── ADD THIS ──
+          awardsSummary: data.awardsSummary ?? null,
           topSongs: data.topSongs?.slice(0, 3).map((s: any) => ({
             title: s.title,
             totalStreams: s.totalStreams,
             dailyStreams: s.dailyStreams,
           })),
-          charts: data.charts?.slice(0, 3).map((c: any) => ({
+          charts: data.charts?.slice(0, 5).map((c: any) => ({
             chartName: c.chartName,
             chartTerritory: c.chartTerritory,
             bestPeakPosition: c.bestPeakPosition,
             weeksAtNumber1: c.weeksAtNumber1,
             totalChartWeeks: c.totalChartWeeks,
           })),
-          awards: data.awards?.slice(0, 3).map((a: any) => ({
+          awards: data.awards?.slice(0, 5).map((a: any) => ({
             awardBody: a.awardBody,
             awardName: a.awardName,
             result: a.result,
@@ -485,6 +671,15 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
             recordType: r.recordType,
             recordValue: r.recordValue,
           })),
+        };
+
+      case 'get_song':
+        return {
+          title: data.title,
+          artistName: data.artistName,
+          totalStreams: data.totalStreams,
+          dailyStreams: data.dailyStreams,
+          slug: data.slug,
         };
 
       case 'get_leaderboard_streams':
@@ -566,10 +761,18 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
 
   private extractSlug(toolName: string, params: any, data: any): string | null {
     if (toolName === 'get_artist') return params.slug ?? null;
+    if (toolName === 'get_song') return data?.slug ?? null;
     if (data?.data?.[0]?.artistSlug) return data.data[0].artistSlug;
     if (data?.data?.[0]?.slug) return data.data[0].slug;
     if (data?.data?.[0]?.artist?.slug) return data.data[0].artist.slug;
     return null;
+  }
+
+  private normalizeTerritory(chartName: string, territory: string): string {
+    // These charts are stored with territory 'UK' not 'GB'
+    const ukCharts = ['official_afrobeats_chart', 'uk_official_singles'];
+    if (ukCharts.includes(chartName)) return 'UK';
+    return territory ?? this.inferTerritory(chartName);
   }
 
   private inferTerritory(chartName: string): string {

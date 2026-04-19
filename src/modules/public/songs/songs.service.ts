@@ -3,6 +3,19 @@ import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { SongsRepository } from './songs.repository';
 import type { PublicSong } from './songs.repository';
 
+export interface PublicSongSearchResult {
+  id: string;
+  title: string;
+  slug: string | null;
+  spotifyTrackId: string | null;
+  artistName: string;
+  artistSlug: string | null;
+  artistImageUrl: string | null;
+  imageUrl: string | null;
+  totalStreams: number | null;
+  dailyStreams: number | null;
+}
+
 @Injectable()
 export class SongsService {
   constructor(
@@ -40,6 +53,18 @@ export class SongsService {
       'songs:indexable',
       3600, // 1 hour
       () => this.songsRepository.getIndexableSongs(),
+    );
+  }
+
+  async searchSong(
+    title: string,
+    artistName?: string,
+  ): Promise<PublicSongSearchResult | null> {
+    const cacheKey = `songs:search:${title.toLowerCase()}${artistName ? `:${artistName.toLowerCase()}` : ''}`;
+    return this.cacheService.cached<PublicSongSearchResult | null>(
+      cacheKey,
+      1800,
+      () => this.songsRepository.searchSong(title, artistName),
     );
   }
 }

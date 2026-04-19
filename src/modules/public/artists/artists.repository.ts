@@ -339,4 +339,28 @@ export class ArtistsRepository {
       total,
     };
   }
+
+  async getAwardsSummary(artistId: string) {
+    const result = await this.db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE LOWER(result) = 'won')                                          AS "totalWins",
+      COUNT(*) FILTER (WHERE LOWER(result) IN ('won', 'nominated', 'nominee'))                AS "totalNominations",
+      COUNT(*) FILTER (WHERE LOWER(award_body) LIKE '%grammy%' AND LOWER(result) = 'won')    AS "grammyWins",
+      COUNT(*) FILTER (WHERE LOWER(award_body) LIKE '%grammy%'
+        AND LOWER(result) IN ('won', 'nominated', 'nominee'))                                 AS "grammyNominations"
+    FROM artist_awards_summary
+    WHERE artist_id = ${artistId}
+  `);
+
+    const row = result.rows[0] as any;
+
+    return (
+      row ?? {
+        totalWins: 0,
+        totalNominations: 0,
+        grammyWins: 0,
+        grammyNominations: 0,
+      }
+    );
+  }
 }

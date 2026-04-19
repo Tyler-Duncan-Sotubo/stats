@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, isNotNull, isNull, sql, and, desc } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
@@ -80,7 +81,6 @@ export class SongsRepository {
   `);
 
     if (!result.rows.length) return null;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return result.rows[0] as any;
   }
 
@@ -137,5 +137,34 @@ export class SongsRepository {
       )
       .orderBy(desc(songs.createdAt))
       .limit(5000);
+  }
+
+  async searchSong(title: string, artistName?: string) {
+    const tsQuery = title
+      .trim()
+      .split(/\s+/)
+      .map((w) => w + ':*')
+      .join(' & ');
+
+    const result = await this.db.execute(sql`
+    SELECT
+      id,
+      title,
+      slug,
+      spotify_track_id    AS "spotifyTrackId",
+      artist_name         AS "artistName",
+      artist_slug         AS "artistSlug",
+      artist_image_url    AS "artistImageUrl",
+      song_image_url      AS "imageUrl",
+      total_streams       AS "totalStreams",
+      daily_streams       AS "dailyStreams"
+    FROM song_search_summary
+    WHERE search_vector @@ to_tsquery('english', ${tsQuery})
+      ${artistName ? sql`AND LOWER(artist_name) LIKE ${'%' + artistName.toLowerCase() + '%'}` : sql``}
+    ORDER BY total_streams DESC NULLS LAST
+    LIMIT 1
+  `);
+
+    return result.rows[0] ?? null;
   }
 }
