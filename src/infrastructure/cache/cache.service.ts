@@ -61,13 +61,9 @@ export class CacheService {
   // ── TTL presets — use these across all services ───────────────────────
 
   static readonly TTL = {
-    // SHORT: 60 * 5, //  5 minutes  — live counters, trending
-    // MEDIUM: 60 * 60 * 6, //  6 hours    — rankings, top lists
-    // LONG: 60 * 60 * 24, // 24 hours    — artist profiles, song pages
-
-    SHORT: 1,
-    MEDIUM: 1,
-    LONG: 1,
+    SHORT: 60 * 5, //  5 minutes  — live counters, trending
+    MEDIUM: 60 * 60 * 6, //  6 hours    — rankings, top lists
+    LONG: 60 * 60 * 24, // 24 hours    — artist profiles, song pages
     EXTENDED: 60 * 60 * 24 * 7, // 7 days   — certifications, awards (rarely change)
   } as const;
 }
