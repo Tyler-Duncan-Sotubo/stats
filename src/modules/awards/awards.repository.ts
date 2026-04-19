@@ -1,155 +1,172 @@
-// src/modules/awards/awards.repository.ts
-
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import {
+  awardRecords,
+  artists,
+  songs,
+  albums,
+} from 'src/infrastructure/drizzle/schema';
+import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
-import { awardRecords } from 'src/infrastructure/drizzle/schema';
-import { CreateAwardDto } from './dto/create-award.dto';
-import { UpdateAwardDto } from './dto/update-award.dto';
-import { QueryAwardDto } from './dto/query-award.dto';
+import { CreateAwardInput } from './inputs/create-award.input';
+import { UpdateAwardInput } from './inputs/update-award.input';
+import { FindAwardsInput } from './inputs/find-awards.input';
 
 @Injectable()
 export class AwardsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
 
-  // ── Write ─────────────────────────────────────────────────────────────
+  // ── Find ──────────────────────────────────────────────────────────────────
 
-  async create(input: CreateAwardDto) {
-    const [row] = await this.db
-      .insert(awardRecords)
-      .values({
-        artistId: input.artistId,
-        songId: input.songId ?? null,
-        albumId: input.albumId ?? null,
-        awardBody: input.awardBody,
-        awardName: input.awardName,
-        category: input.category,
-        result: input.result,
-        year: input.year,
-        ceremony: input.ceremony ?? null,
-        territory: input.territory ?? null,
-        sourceUrl: input.sourceUrl ?? null,
-        notes: input.notes ?? null,
-      })
-      .returning();
+  async findAll(input: FindAwardsInput) {
+    const {
+      artistId,
+      awardBody,
+      category,
+      result,
+      territory,
+      year,
+      page,
+      limit,
+    } = input;
+    const offset = (page - 1) * limit;
 
-    return row;
-  }
+    const conditions: (ReturnType<typeof eq> | ReturnType<typeof and>)[] = [];
 
-  async bulkCreate(inputs: CreateAwardDto[]) {
-    if (!inputs.length) return [];
+    if (artistId) conditions.push(eq(awardRecords.artistId, artistId));
+    if (awardBody) conditions.push(eq(awardRecords.awardBody, awardBody));
+    if (category) conditions.push(eq(awardRecords.category, category));
+    if (result) conditions.push(eq(awardRecords.result, result));
+    if (territory) conditions.push(eq(awardRecords.territory, territory));
+    if (year) conditions.push(eq(awardRecords.year, year));
 
-    return this.db
-      .insert(awardRecords)
-      .values(
-        inputs.map((input) => ({
-          artistId: input.artistId,
-          songId: input.songId ?? null,
-          albumId: input.albumId ?? null,
-          awardBody: input.awardBody,
-          awardName: input.awardName,
-          category: input.category,
-          result: input.result,
-          year: input.year,
-          ceremony: input.ceremony ?? null,
-          territory: input.territory ?? null,
-          sourceUrl: input.sourceUrl ?? null,
-          notes: input.notes ?? null,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: [
-          awardRecords.artistId,
-          awardRecords.awardBody,
-          awardRecords.awardName,
-          awardRecords.year,
-        ],
-        set: {
-          result: awardRecords.result,
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    const [rows, [{ count }]] = await Promise.all([
+      this.db
+        .select({
+          id: awardRecords.id,
+          artistId: awardRecords.artistId,
+          songId: awardRecords.songId,
+          albumId: awardRecords.albumId,
+          awardBody: awardRecords.awardBody,
+          awardName: awardRecords.awardName,
           category: awardRecords.category,
+          result: awardRecords.result,
+          year: awardRecords.year,
           ceremony: awardRecords.ceremony,
           territory: awardRecords.territory,
           sourceUrl: awardRecords.sourceUrl,
           notes: awardRecords.notes,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+          createdAt: awardRecords.createdAt,
+          updatedAt: awardRecords.updatedAt,
+          artistName: artists.name,
+          artistSlug: artists.slug,
+          songTitle: songs.title,
+          songSlug: songs.slug,
+          albumTitle: albums.title,
+          albumSlug: albums.slug,
+        })
+        .from(awardRecords)
+        .leftJoin(artists, eq(awardRecords.artistId, artists.id))
+        .leftJoin(songs, eq(awardRecords.songId, songs.id))
+        .leftJoin(albums, eq(awardRecords.albumId, albums.id))
+        .where(where)
+        .orderBy(awardRecords.year)
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(awardRecords)
+        .where(where),
+    ]);
+
+    return { rows, total: Number(count) };
   }
-
-  async update(id: string, input: UpdateAwardDto) {
-    const [row] = await this.db
-      .update(awardRecords)
-      .set({
-        ...input,
-        updatedAt: new Date(),
-      })
-      .where(eq(awardRecords.id, id))
-      .returning();
-
-    return row ?? null;
-  }
-
-  async delete(id: string) {
-    const [row] = await this.db
-      .delete(awardRecords)
-      .where(eq(awardRecords.id, id))
-      .returning();
-
-    return row ?? null;
-  }
-
-  async deleteByIds(ids: string[]) {
-    if (!ids.length) return [];
-
-    return this.db
-      .delete(awardRecords)
-      .where(inArray(awardRecords.id, ids))
-      .returning();
-  }
-
-  // ── Read ──────────────────────────────────────────────────────────────
 
   async findById(id: string) {
     const [row] = await this.db
-      .select()
+      .select({
+        id: awardRecords.id,
+        artistId: awardRecords.artistId,
+        songId: awardRecords.songId,
+        albumId: awardRecords.albumId,
+        awardBody: awardRecords.awardBody,
+        awardName: awardRecords.awardName,
+        category: awardRecords.category,
+        result: awardRecords.result,
+        year: awardRecords.year,
+        ceremony: awardRecords.ceremony,
+        territory: awardRecords.territory,
+        sourceUrl: awardRecords.sourceUrl,
+        notes: awardRecords.notes,
+        createdAt: awardRecords.createdAt,
+        updatedAt: awardRecords.updatedAt,
+        artistName: artists.name,
+        artistSlug: artists.slug,
+        songTitle: songs.title,
+        songSlug: songs.slug,
+        albumTitle: albums.title,
+        albumSlug: albums.slug,
+      })
       .from(awardRecords)
+      .leftJoin(artists, eq(awardRecords.artistId, artists.id))
+      .leftJoin(songs, eq(awardRecords.songId, songs.id))
+      .leftJoin(albums, eq(awardRecords.albumId, albums.id))
       .where(eq(awardRecords.id, id))
       .limit(1);
-
     return row ?? null;
   }
 
-  async findMany(query: QueryAwardDto) {
-    const conditions: any[] = [];
-
-    if (query.artistId)
-      conditions.push(eq(awardRecords.artistId, query.artistId));
-
-    if (query.songId) conditions.push(eq(awardRecords.songId, query.songId));
-    if (query.albumId) conditions.push(eq(awardRecords.albumId, query.albumId));
-    if (query.awardBody)
-      conditions.push(eq(awardRecords.awardBody, query.awardBody));
-    if (query.result) conditions.push(eq(awardRecords.result, query.result));
-    if (query.year) conditions.push(eq(awardRecords.year, query.year));
-    if (query.territory)
-      conditions.push(
-        eq(awardRecords.territory, query.territory.toUpperCase()),
-      );
-
-    return this.db
+  async findByUniqueKey(
+    artistId: string,
+    awardBody: string,
+    awardName: string,
+    year: number,
+  ) {
+    const [row] = await this.db
       .select()
       .from(awardRecords)
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(awardRecords.year);
+      .where(
+        and(
+          eq(awardRecords.artistId, artistId),
+          eq(awardRecords.awardBody, awardBody),
+          eq(awardRecords.awardName, awardName),
+          eq(awardRecords.year, year),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
-  async findByArtist(artistId: string) {
-    return this.db
-      .select()
-      .from(awardRecords)
-      .where(eq(awardRecords.artistId, artistId))
-      .orderBy(awardRecords.year);
+  // ── Create ────────────────────────────────────────────────────────────────
+
+  async create(input: CreateAwardInput) {
+    const [created] = await this.db
+      .insert(awardRecords)
+      .values(input)
+      .returning();
+    return created;
+  }
+
+  // ── Update ────────────────────────────────────────────────────────────────
+
+  async update(id: string, input: UpdateAwardInput) {
+    const [updated] = await this.db
+      .update(awardRecords)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(awardRecords.id, id))
+      .returning();
+    return updated ?? null;
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  async delete(id: string) {
+    const [deleted] = await this.db
+      .delete(awardRecords)
+      .where(eq(awardRecords.id, id))
+      .returning();
+    return deleted ?? null;
   }
 }

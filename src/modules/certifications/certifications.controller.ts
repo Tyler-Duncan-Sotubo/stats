@@ -1,28 +1,75 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { CertificationsService } from './certifications.service';
+import { CertificationQueryDto } from './dto/certification-query.dto';
+import { CreateCertificationDto } from './dto/create-certification.dto';
+import { UpdateCertificationDto } from './dto/update-certification.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FileParseInterceptor } from 'src/common/interceptors/file-parse.interceptor';
+import { CertificationsBulkService } from './certifications-bulk.service';
 
 @Controller('certifications')
+@UseGuards(JwtAuthGuard)
 export class CertificationsController {
-  constructor(private readonly certificationsService: CertificationsService) {}
+  constructor(
+    private readonly certificationsService: CertificationsService,
+    private readonly certificationsBulkService: CertificationsBulkService,
+  ) {}
 
-  // GET /certifications/sync/artist/:artistId
-  @Get('sync/artist/:artistId')
-  syncArtist(@Param('artistId') artistId: string) {
-    return this.certificationsService.syncArtistCertifications(artistId);
+  @Get()
+  findAll(@Query() query: CertificationQueryDto) {
+    return this.certificationsService.findAll(query);
   }
 
-  @Get('sync/all')
-  syncAll() {
-    // Fire and forget — don't await, just kick it off
-    // 300+ artists hitting RIAA will take several minutes
-    this.certificationsService
-      .syncAllArtists()
-      .catch((err) =>
-        console.error(`syncAllArtists failed: ${(err as Error).message}`),
-      );
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.certificationsService.findOne(id);
+  }
 
-    return {
-      message: 'RIAA sync started for all artists — check logs for progress',
-    };
+  @Post()
+  create(@Body() dto: CreateCertificationDto) {
+    return this.certificationsService.create(dto);
+  }
+
+  @Post('bulk')
+  @UseInterceptors(FileParseInterceptor({ field: 'file', maxRows: 500 }))
+  async bulkCreate(@Body() rows: any[]) {
+    return this.certificationsBulkService.bulkCreate(rows);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCertificationDto,
+  ) {
+    return this.certificationsService.update(id, dto);
+  }
+
+  @Patch('bulk-resolve')
+  @HttpCode(HttpStatus.OK)
+  bulkResolve(
+    @Body('ids') ids: string[],
+    @Body('resolutionStatus') resolutionStatus: string,
+  ) {
+    return this.certificationsService.bulkResolve(ids, resolutionStatus);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.certificationsService.remove(id);
   }
 }

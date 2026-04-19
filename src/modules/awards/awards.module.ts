@@ -1,11 +1,20 @@
 import { Module } from '@nestjs/common';
+import { AwardsController } from './awards.controller';
 import { AwardsService } from './awards.service';
 import { AwardsRepository } from './awards.repository';
-import { AwardsController } from './awards.controller';
+import { ArtistsRepository } from '../artists/artists.repository';
+import { SongsRepository } from '../songs/songs.repository';
+import { AwardsBulkService } from './awards-bulk.service';
 
 @Module({
-  providers: [AwardsService, AwardsRepository],
   controllers: [AwardsController],
-  exports: [AwardsService],
+  providers: [
+    AwardsService,
+    AwardsRepository,
+    ArtistsRepository,
+    SongsRepository,
+    AwardsBulkService,
+  ],
+  exports: [AwardsService, AwardsRepository],
 })
 export class AwardsModule {}

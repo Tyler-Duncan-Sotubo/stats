@@ -1,64 +1,63 @@
 import {
-  Body,
   Controller,
-  Delete,
   Get,
-  Param,
   Post,
-  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
   Query,
-  Logger,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AwardsService } from './awards.service';
+import { AwardQueryDto } from './dto/award-query.dto';
 import { CreateAwardDto } from './dto/create-award.dto';
 import { UpdateAwardDto } from './dto/update-award.dto';
-import { QueryAwardDto } from './dto/query-award.dto';
-
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FileParseInterceptor } from 'src/common/interceptors/file-parse.interceptor';
+import { AwardsBulkService } from './awards-bulk.service';
 @Controller('awards')
+@UseGuards(JwtAuthGuard)
 export class AwardsController {
-  private readonly logger = new Logger(AwardsController.name);
+  constructor(
+    private readonly awardsService: AwardsService,
+    private readonly awardsBulkService: AwardsBulkService,
+  ) {}
 
-  constructor(private readonly awardsService: AwardsService) {}
-
-  // ── Create ────────────────────────────────────────────────────────────
-
-  @Post()
-  create(@Body() body: CreateAwardDto) {
-    return this.awardsService.create(body);
-  }
-
-  // ── Read ──────────────────────────────────────────────────────────────
   @Get()
-  getMany(@Query() query: QueryAwardDto) {
-    return this.awardsService.getMany(query);
-  }
-
-  @Get('artist/:artistId')
-  getByArtist(@Param('artistId') artistId: string) {
-    return this.awardsService.getByArtist(artistId);
+  findAll(@Query() query: AwardQueryDto) {
+    return this.awardsService.findAll(query);
   }
 
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.awardsService.getById(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.awardsService.findOne(id);
   }
 
-  // ── Update ────────────────────────────────────────────────────────────
-
-  @Put(':id')
-  update(@Param('id') id: string, @Body() body: UpdateAwardDto) {
-    return this.awardsService.update(id, body);
+  @Post()
+  create(@Body() dto: CreateAwardDto) {
+    return this.awardsService.create(dto);
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────
+  // Add endpoint:
+  @Post('bulk')
+  @UseInterceptors(FileParseInterceptor({ field: 'file', maxRows: 500 }))
+  bulkCreate(@Body() rows: any[]) {
+    return this.awardsBulkService.bulkCreate(rows);
+  }
 
-  @Delete('bulk')
-  bulkDelete(@Body() body: { ids: string[] }) {
-    return this.awardsService.bulkDelete(body.ids);
+  @Patch(':id')
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAwardDto) {
+    return this.awardsService.update(id, dto);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.awardsService.delete(id);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.awardsService.remove(id);
   }
 }

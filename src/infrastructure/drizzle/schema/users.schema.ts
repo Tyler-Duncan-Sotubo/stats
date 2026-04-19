@@ -1,6 +1,5 @@
 import { pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { defaultId } from '../default-id';
-import { roleEnum } from './enum';
 
 export const users = pgTable(
   'users',
@@ -9,7 +8,7 @@ export const users = pgTable(
     name: text('name').notNull(),
     email: text('email').notNull(),
     password: text('password').notNull(),
-    role: roleEnum('role').default('contributor').notNull(),
+    role: text('role').default('contributor').notNull(),
     location: text('location'),
     avatar: text('avatar'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

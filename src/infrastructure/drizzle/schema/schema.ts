@@ -68,6 +68,48 @@ export const artists = pgTable(
 );
 
 /* ============================================================================
+   ARTIST MONTHLY LISTENER SNAPSHOTS
+============================================================================ */
+
+export const artistMonthlyListenerSnapshots = pgTable(
+  'artist_monthly_listener_snapshots',
+  {
+    id: uuid('id').primaryKey().$defaultFn(defaultId),
+
+    artistId: uuid('artist_id')
+      .notNull()
+      .references(() => artists.id, { onDelete: 'cascade' }),
+    spotifyId: text('spotify_id').notNull(),
+    snapshotDate: date('snapshot_date', { mode: 'string' }).notNull(),
+    monthlyListeners: bigint('monthly_listeners', { mode: 'number' }).notNull(),
+    dailyChange: bigint('daily_change', { mode: 'number' }),
+    peakRank: integer('peak_rank'),
+    peakListeners: bigint('peak_listeners', { mode: 'number' }),
+    source: text('source').notNull().default('kworb'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_artist_monthly_listener_snapshot').on(
+      table.artistId,
+      table.snapshotDate,
+    ),
+    index('idx_amls_snapshot_date').on(table.snapshotDate),
+    index('idx_amls_monthly_listeners').on(
+      table.snapshotDate,
+      table.monthlyListeners,
+    ),
+    index('idx_amls_daily_change').on(table.snapshotDate, table.dailyChange),
+    index('idx_amls_artist').on(table.artistId, table.snapshotDate),
+    index('idx_amls_spotify_id').on(table.spotifyId),
+  ],
+);
+
+/* ============================================================================
    ARTIST ALIASES
 ============================================================================ */
 
@@ -573,6 +615,24 @@ export const records = pgTable(
     index('records_song_idx').on(t.songId),
     index('records_is_active_idx').on(t.isActive),
     index('records_numeric_value_idx').on(t.recordType, t.numericValue),
+  ],
+);
+
+export const askQuestions = pgTable(
+  'ask_questions',
+  {
+    id: uuid('id').primaryKey().$defaultFn(defaultId),
+    question: text('question').notNull(),
+    slug: text('slug').notNull(),
+    toolUsed: text('tool_used'),
+    answer: text('answer'),
+    askCount: integer('ask_count').default(1).notNull(),
+    lastAsked: timestamp('last_asked').defaultNow(),
+    createdAt: timestamp('created_at').defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ask_questions_slug_idx').on(table.slug),
+    index('ask_questions_last_asked_idx').on(table.lastAsked),
   ],
 );
 

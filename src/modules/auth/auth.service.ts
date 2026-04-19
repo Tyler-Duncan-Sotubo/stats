@@ -67,7 +67,7 @@ export class AuthService {
       .values({
         name: dto.name,
         email: dto.email,
-        role: dto.role, // If undefined, the database column default kicks in
+        role: dto.role ?? 'admin',
         password: hashedPassword,
         location: dto.location,
       })

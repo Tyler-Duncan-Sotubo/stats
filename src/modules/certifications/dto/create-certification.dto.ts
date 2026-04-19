@@ -1,20 +1,15 @@
-// src/modules/certifications/dto/create-certification.dto.ts
-
 import {
   IsString,
-  IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsInt,
-  IsPositive,
-  IsISO31661Alpha2,
   IsDateString,
-  IsUrl,
   IsIn,
+  IsInt,
+  IsUrl,
+  Min,
 } from 'class-validator';
-import { CreateCertificationInput } from '../inputs/create-certification.input';
 
-export class CreateCertificationDto implements CreateCertificationInput {
+export class CreateCertificationDto {
   @IsOptional()
   @IsUUID()
   artistId?: string;
@@ -27,20 +22,22 @@ export class CreateCertificationDto implements CreateCertificationInput {
   @IsUUID()
   albumId?: string;
 
-  @IsISO31661Alpha2()
+  @IsString()
   territory!: string;
 
   @IsString()
-  @IsNotEmpty()
-  body!: string; // 'RIAA' | 'BPI' | 'IFPI' etc.
+  body!: string;
 
-  @IsIn(['silver', 'gold', 'platinum', 'diamond'])
+  @IsString()
+  title!: string;
+
+  @IsIn(['diamond', 'platinum', 'gold', 'silver'])
   level!: string;
 
   @IsOptional()
   @IsInt()
-  @IsPositive()
-  units?: number; // 3 = 3x Platinum
+  @Min(0)
+  units?: number;
 
   @IsOptional()
   @IsDateString()
@@ -49,4 +46,16 @@ export class CreateCertificationDto implements CreateCertificationInput {
   @IsOptional()
   @IsUrl()
   sourceUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  rawArtistName?: string;
+
+  @IsOptional()
+  @IsString()
+  rawTitle?: string;
+
+  @IsOptional()
+  @IsIn(['matched', 'artist_only', 'unresolved'])
+  resolutionStatus?: string;
 }

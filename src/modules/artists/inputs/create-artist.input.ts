@@ -1,9 +1,14 @@
 export interface CreateArtistInput {
   name: string;
-  spotifyId: string;
+  normalizedName: string;
+  slug: string;
+  spotifyId?: string;
   originCountry?: string;
   debutYear?: number;
-  bio?: string;
+  imageUrl?: string;
   isAfrobeats?: boolean;
   isAfrobeatsOverride?: boolean;
+  bio?: string;
+  entityStatus?: string;
+  sourceOfTruth?: string;
 }

@@ -40,6 +40,7 @@
     "@nestjs/platform-fastify": "^11.1.17",
     "@nestjs/platform-socket.io": "^11.1.17",
     "@nestjs/schedule": "^6.1.1",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.17",
     "axios": "^1.15.0",
     "bcryptjs": "^3.0.3",
@@ -47,12 +48,14 @@
     "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.4",
+    "csv-parse": "^6.2.1",
     "dayjs": "^1.11.20",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.8.4",
     "ioredis": "^5.10.1",
     "joi": "^18.1.1",
     "nestjs-pino": "^4.6.1",
+    "openai": "^6.34.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",
@@ -63,7 +66,8 @@
     "rxjs": "^7.8.1",
     "slugify": "^1.6.9",
     "socket.io": "^4.8.3",
-    "uuidv7": "^1.2.1"
+    "uuidv7": "^1.2.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

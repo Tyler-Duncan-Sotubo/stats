@@ -1,26 +1,20 @@
-// src/modules/certifications/certifications.module.ts
-
 import { Module } from '@nestjs/common';
+import { CertificationsController } from './certifications.controller';
 import { CertificationsService } from './certifications.service';
 import { CertificationsRepository } from './certifications.repository';
-import { CertificationsController } from './certifications.controller';
-import { RiaaCertificationService } from '../scraper/services/riaa-certification.service';
-import { ArtistsModule } from '../artists/artists.module';
-import { CertificationsScheduler } from './certifications.scheduler';
+import { ArtistsRepository } from '../artists/artists.repository';
 import { SongsRepository } from '../songs/songs.repository';
-import { EntityResolutionService } from '../catalog/entity-resolution.service';
+import { CertificationsBulkService } from './certifications-bulk.service';
 
 @Module({
-  imports: [ArtistsModule],
   controllers: [CertificationsController],
   providers: [
     CertificationsService,
     CertificationsRepository,
-    RiaaCertificationService,
-    CertificationsScheduler,
+    ArtistsRepository,
     SongsRepository,
-    EntityResolutionService,
+    CertificationsBulkService,
   ],
-  exports: [CertificationsService],
+  exports: [CertificationsService, CertificationsRepository],
 })
 export class CertificationsModule {}

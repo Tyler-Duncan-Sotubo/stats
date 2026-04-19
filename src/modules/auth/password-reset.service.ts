@@ -34,15 +34,13 @@ export class PasswordResetService {
       return { message: 'If that email exists, a reset link has been sent.' };
     }
 
-    const token = this.tokenService.generateTempToken({
-      id: user.id,
-      email: user.email,
-    });
+    // const token = this.tokenService.generateTempToken({
+    //   id: user.id,
+    //   email: user.email,
+    // });
 
-    const clientUrl = this.configService.get<string>('CLIENT_URL');
-    const resetLink = `${clientUrl}/reset-password/${token}`;
-
-    console.log(`Password reset link for ${email}: ${resetLink}`);
+    // const clientUrl = this.configService.get<string>('CLIENT_URL');
+    // // const resetLink = `${clientUrl}/reset-password/${token}`;
 
     return { message: 'If that email exists, a reset link has been sent.' };
   }

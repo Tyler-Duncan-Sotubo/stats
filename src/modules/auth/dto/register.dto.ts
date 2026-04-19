@@ -1,6 +1,5 @@
 import {
   IsEmail,
-  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -20,9 +19,8 @@ export class RegisterDto {
   @MinLength(8)
   password!: string;
 
-  @IsEnum(['admin', 'editor', 'contributor'])
   @IsOptional()
-  role?: 'admin' | 'editor' | 'contributor';
+  role?: 'admin' | 'contributor';
 
   @IsString()
   @IsOptional()

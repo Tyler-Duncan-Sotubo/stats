@@ -1,12 +1,66 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, inArray, sql, and } from 'drizzle-orm';
+import {
+  songs,
+  songAliases,
+  songExternalIds,
+  songFeatures,
+  artists,
+} from 'src/infrastructure/drizzle/schema';
+import { eq, ilike, and, sql, isNull, inArray } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
-import { songs } from 'src/infrastructure/drizzle/schema';
+import { CreateSongInput } from './inputs/create-song.input';
+import { UpdateSongInput } from './inputs/update-song.input';
+import { FindSongsInput } from './inputs/find-songs.input';
 
 @Injectable()
 export class SongsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+
+  // ── Find ──────────────────────────────────────────────────────────────────
+
+  async findAll(input: FindSongsInput) {
+    const {
+      search,
+      artistId,
+      isAfrobeats,
+      entityStatus,
+      needsReview,
+      explicit,
+      page,
+      limit,
+    } = input;
+    const offset = (page - 1) * limit;
+
+    const conditions = [isNull(songs.mergedIntoSongId)];
+
+    if (search) conditions.push(ilike(songs.title, `%${search}%`));
+    if (artistId) conditions.push(eq(songs.artistId, artistId));
+    if (isAfrobeats !== undefined)
+      conditions.push(eq(songs.isAfrobeats, isAfrobeats));
+    if (entityStatus) conditions.push(eq(songs.entityStatus, entityStatus));
+    if (needsReview !== undefined)
+      conditions.push(eq(songs.needsReview, needsReview));
+    if (explicit !== undefined) conditions.push(eq(songs.explicit, explicit));
+
+    const where = and(...conditions);
+
+    const [rows, [{ count }]] = await Promise.all([
+      this.db
+        .select()
+        .from(songs)
+        .where(where)
+        .orderBy(songs.title)
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(songs)
+        .where(where),
+    ]);
+
+    return { rows, total: Number(count) };
+  }
 
   async findById(id: string) {
     const [row] = await this.db
@@ -14,7 +68,15 @@ export class SongsRepository {
       .from(songs)
       .where(eq(songs.id, id))
       .limit(1);
+    return row ?? null;
+  }
 
+  async findBySlug(slug: string) {
+    const [row] = await this.db
+      .select()
+      .from(songs)
+      .where(eq(songs.slug, slug))
+      .limit(1);
     return row ?? null;
   }
 
@@ -24,164 +86,220 @@ export class SongsRepository {
       .from(songs)
       .where(eq(songs.spotifyTrackId, spotifyTrackId))
       .limit(1);
-
     return row ?? null;
   }
 
-  async findBySpotifyTrackIds(spotifyTrackIds: string[]) {
-    if (!spotifyTrackIds.length) return [];
+  async findWithRelations(id: string) {
+    const song = await this.findById(id);
+    if (!song) return null;
 
-    return this.db
-      .select()
-      .from(songs)
-      .where(inArray(songs.spotifyTrackId, spotifyTrackIds));
+    const [aliases, externalIds, features] = await Promise.all([
+      this.db.select().from(songAliases).where(eq(songAliases.songId, id)),
+      this.db
+        .select()
+        .from(songExternalIds)
+        .where(eq(songExternalIds.songId, id)),
+      this.db
+        .select({
+          id: songFeatures.id,
+          songId: songFeatures.songId,
+          featuredArtistId: songFeatures.featuredArtistId,
+          artistName: artists.name,
+          artistSlug: artists.slug,
+        })
+        .from(songFeatures)
+        .innerJoin(artists, eq(songFeatures.featuredArtistId, artists.id))
+        .where(eq(songFeatures.songId, id)),
+    ]);
+
+    return { ...song, aliases, externalIds, features };
   }
 
-  async findByArtistId(artistId: string) {
-    return this.db
-      .select({
-        id: songs.id,
-        title: songs.title,
-        normalizedTitle: songs.normalizedTitle,
-        spotifyTrackId: songs.spotifyTrackId,
-        slug: songs.slug,
-      })
-      .from(songs)
-      .where(eq(songs.artistId, artistId));
+  // ── Create ────────────────────────────────────────────────────────────────
+
+  async create(input: CreateSongInput) {
+    const [created] = await this.db.insert(songs).values(input).returning();
+    return created;
   }
 
-  async findByArtistIdAndNormalizedTitle(
-    artistId: string,
-    normalizedTitle: string,
-  ) {
-    const [row] = await this.db
-      .select()
-      .from(songs)
-      .where(
-        and(
-          eq(songs.artistId, artistId),
-          eq(songs.normalizedTitle, normalizedTitle),
-        ),
-      )
-      .limit(1);
+  // ── Update ────────────────────────────────────────────────────────────────
 
-    return row ?? null;
-  }
-
-  async findSongsNeedingEnrichment(limit = 100) {
-    return this.db
-      .select({
-        id: songs.id,
-        artistId: songs.artistId,
-        spotifyTrackId: songs.spotifyTrackId,
-        title: songs.title,
-        normalizedTitle: songs.normalizedTitle,
-        albumId: songs.albumId,
-        releaseDate: songs.releaseDate,
-        durationMs: songs.durationMs,
-        imageUrl: songs.imageUrl,
-      })
-      .from(songs)
-      .where(
-        sql`(
-          ${songs.spotifyTrackId} is not null
-          and (
-            ${songs.albumId} is null
-            or ${songs.releaseDate} is null
-            or ${songs.durationMs} is null
-            or ${songs.imageUrl} is null
-          )
-        )`,
-      )
-      .limit(limit);
-  }
-
-  async upsertBySpotifyTrackId(data: typeof songs.$inferInsert) {
-    const [row] = await this.db
-      .insert(songs)
-      .values({
-        ...data,
-      })
-      .onConflictDoUpdate({
-        target: songs.spotifyTrackId,
-        set: {
-          artistId: sql`excluded.artist_id`,
-          albumId: sql`excluded.album_id`,
-          title: sql`excluded.title`,
-          normalizedTitle: sql`excluded.normalized_title`,
-          canonicalTitle: sql`excluded.canonical_title`,
-          releaseDate: sql`excluded.release_date`,
-          durationMs: sql`excluded.duration_ms`,
-          explicit: sql`excluded.explicit`,
-          imageUrl: sql`excluded.image_url`,
-          sourceOfTruth: sql`excluded.source_of_truth`,
-          needsReview: sql`excluded.needs_review`,
-        },
-      })
-      .returning();
-
-    return row;
-  }
-
-  async upsertManyBySpotifyTrackId(data: (typeof songs.$inferInsert)[]) {
-    if (!data.length) return [];
-
-    return this.db
-      .insert(songs)
-      .values(data)
-      .onConflictDoUpdate({
-        target: songs.spotifyTrackId,
-        set: {
-          artistId: sql`excluded.artist_id`,
-          albumId: sql`excluded.album_id`,
-          title: sql`excluded.title`,
-          normalizedTitle: sql`excluded.normalized_title`,
-          canonicalTitle: sql`excluded.canonical_title`,
-          releaseDate: sql`excluded.release_date`,
-          durationMs: sql`excluded.duration_ms`,
-          explicit: sql`excluded.explicit`,
-          imageUrl: sql`excluded.image_url`,
-          sourceOfTruth: sql`excluded.source_of_truth`,
-          needsReview: sql`excluded.needs_review`,
-        },
-      })
-      .returning();
-  }
-
-  async upsertAllFields(data: typeof songs.$inferInsert) {
-    const [row] = await this.db
-      .insert(songs)
-      .values(data)
-      .onConflictDoUpdate({
-        target: songs.spotifyTrackId,
-        set: {
-          artistId: sql`excluded.artist_id`,
-          albumId: sql`excluded.album_id`,
-          title: sql`excluded.title`,
-          normalizedTitle: sql`excluded.normalized_title`,
-          canonicalTitle: sql`excluded.canonical_title`,
-          releaseDate: sql`excluded.release_date`,
-          durationMs: sql`excluded.duration_ms`,
-          explicit: sql`excluded.explicit`,
-          imageUrl: sql`excluded.image_url`,
-          isAfrobeats: sql`excluded.is_afrobeats`,
-          sourceOfTruth: sql`excluded.source_of_truth`,
-          entityStatus: sql`excluded.entity_status`,
-          needsReview: sql`excluded.needs_review`,
-        },
-      })
-      .returning();
-
-    return row;
-  }
-
-  async updateById(id: string, data: Partial<typeof songs.$inferInsert>) {
-    const [row] = await this.db
+  async update(id: string, input: UpdateSongInput) {
+    const [updated] = await this.db
       .update(songs)
-      .set(data)
+      .set({ ...input })
       .where(eq(songs.id, id))
       .returning();
+    return updated ?? null;
+  }
 
-    return row;
+  async merge(sourceId: string, targetId: string) {
+    const [updated] = await this.db
+      .update(songs)
+      .set({
+        mergedIntoSongId: targetId,
+        entityStatus: 'merged',
+      })
+      .where(eq(songs.id, sourceId))
+      .returning();
+    return updated ?? null;
+  }
+
+  async flagForReview(id: string, flag: boolean) {
+    const [updated] = await this.db
+      .update(songs)
+      .set({ needsReview: flag })
+      .where(eq(songs.id, id))
+      .returning();
+    return updated ?? null;
+  }
+
+  async bulkUpdate(
+    ids: string[],
+    input: {
+      isAfrobeats?: boolean;
+      needsReview?: boolean;
+      entityStatus?: string;
+    },
+  ) {
+    return this.db
+      .update(songs)
+      .set({ ...input })
+      .where(inArray(songs.id, ids))
+      .returning();
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  async delete(id: string) {
+    const [deleted] = await this.db
+      .delete(songs)
+      .where(eq(songs.id, id))
+      .returning();
+    return deleted ?? null;
+  }
+
+  // ── Aliases ───────────────────────────────────────────────────────────────
+
+  async findAliases(songId: string) {
+    return this.db
+      .select()
+      .from(songAliases)
+      .where(eq(songAliases.songId, songId));
+  }
+
+  async addAlias(
+    songId: string,
+    input: {
+      alias: string;
+      normalizedAlias: string;
+      source?: string;
+      isPrimary?: boolean;
+    },
+  ) {
+    const [created] = await this.db
+      .insert(songAliases)
+      .values({ songId, ...input })
+      .onConflictDoNothing()
+      .returning();
+    return created ?? null;
+  }
+
+  async setPrimaryAlias(songId: string, aliasId: string) {
+    await this.db
+      .update(songAliases)
+      .set({ isPrimary: false })
+      .where(eq(songAliases.songId, songId));
+
+    const [updated] = await this.db
+      .update(songAliases)
+      .set({ isPrimary: true })
+      .where(and(eq(songAliases.id, aliasId), eq(songAliases.songId, songId)))
+      .returning();
+    return updated ?? null;
+  }
+
+  async deleteAlias(songId: string, aliasId: string) {
+    const [deleted] = await this.db
+      .delete(songAliases)
+      .where(and(eq(songAliases.id, aliasId), eq(songAliases.songId, songId)))
+      .returning();
+    return deleted ?? null;
+  }
+
+  // ── External IDs ──────────────────────────────────────────────────────────
+
+  async findExternalIds(songId: string) {
+    return this.db
+      .select()
+      .from(songExternalIds)
+      .where(eq(songExternalIds.songId, songId));
+  }
+
+  async addExternalId(
+    songId: string,
+    input: {
+      source: string;
+      externalId: string;
+      externalUrl?: string;
+    },
+  ) {
+    const [created] = await this.db
+      .insert(songExternalIds)
+      .values({ songId, ...input })
+      .onConflictDoNothing()
+      .returning();
+    return created ?? null;
+  }
+
+  async deleteExternalId(songId: string, externalIdId: string) {
+    const [deleted] = await this.db
+      .delete(songExternalIds)
+      .where(
+        and(
+          eq(songExternalIds.id, externalIdId),
+          eq(songExternalIds.songId, songId),
+        ),
+      )
+      .returning();
+    return deleted ?? null;
+  }
+
+  // ── Features ──────────────────────────────────────────────────────────────
+
+  async findFeatures(songId: string) {
+    return this.db
+      .select({
+        id: songFeatures.id,
+        songId: songFeatures.songId,
+        featuredArtistId: songFeatures.featuredArtistId,
+        artistName: artists.name,
+        artistSlug: artists.slug,
+      })
+      .from(songFeatures)
+      .innerJoin(artists, eq(songFeatures.featuredArtistId, artists.id))
+      .where(eq(songFeatures.songId, songId));
+  }
+
+  async addFeature(songId: string, featuredArtistId: string) {
+    const [created] = await this.db
+      .insert(songFeatures)
+      .values({ songId, featuredArtistId })
+      .onConflictDoNothing()
+      .returning();
+    return created ?? null;
+  }
+
+  async deleteFeature(songId: string, featuredArtistId: string) {
+    const [deleted] = await this.db
+      .delete(songFeatures)
+      .where(
+        and(
+          eq(songFeatures.songId, songId),
+          eq(songFeatures.featuredArtistId, featuredArtistId),
+        ),
+      )
+      .returning();
+    return deleted ?? null;
   }
 }

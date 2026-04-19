@@ -9,6 +9,14 @@ import * as schema from './schema';
 export const DRIZZLE = Symbol('DRIZZLE');
 export type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>;
 
+// Eagerly created singleton — used by AdminJS resources directly
+let _db: ReturnType<typeof drizzle<typeof schema>>;
+
+export function getDb() {
+  if (!_db) throw new Error('DB not initialized yet');
+  return _db;
+}
+
 @Global()
 @Module({
   providers: [
@@ -18,15 +26,15 @@ export type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>;
       useFactory: async (config: ConfigService) => {
         const pool = new Pool({
           connectionString: config.getOrThrow('DATABASE_URL'),
-          max: 10, // max pool size
+          max: 10,
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 2000,
         });
 
-        // eager connect — don't wait for first query
         await pool.connect();
 
-        return drizzle(pool, { schema });
+        _db = drizzle(pool, { schema });
+        return _db;
       },
     },
   ],

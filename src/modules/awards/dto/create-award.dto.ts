@@ -1,63 +1,57 @@
-// src/modules/awards/inputs/create-award.input.ts
-
 import {
   IsString,
-  IsNotEmpty,
   IsOptional,
-  IsEnum,
-  IsInt,
   IsUUID,
+  IsInt,
   IsUrl,
+  IsIn,
   Min,
   Max,
 } from 'class-validator';
 
 export class CreateAwardDto {
-  @IsUUID()
-  @IsNotEmpty()
-  artistId!: string;
-
-  @IsUUID()
   @IsOptional()
-  songId?: string | null;
-
   @IsUUID()
+  artistId?: string;
+
   @IsOptional()
-  albumId?: string | null;
+  @IsUUID()
+  songId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  albumId?: string;
 
   @IsString()
-  @IsNotEmpty()
-  awardBody!: string; // 'Grammy', 'BET', 'MTV VMA', 'MOBO'
+  awardBody!: string;
 
   @IsString()
-  @IsNotEmpty()
-  awardName!: string; // 'Best Global Music Album'
+  awardName!: string;
 
   @IsString()
-  @IsNotEmpty()
-  category!: string; // 'Album', 'Song', 'Artist'
+  category!: string;
 
-  @IsEnum(['won', 'nominated'])
-  result!: 'won' | 'nominated';
+  @IsIn(['won', 'nominated'])
+  result!: string;
 
   @IsInt()
   @Min(1900)
-  @Max(2100)
+  @Max(new Date().getFullYear())
   year!: number;
 
-  @IsString()
   @IsOptional()
-  ceremony?: string | null; // '66th Grammy Awards'
-
   @IsString()
-  @IsOptional()
-  territory?: string | null; // 'US' | 'UK' | 'GLOBAL'
+  ceremony?: string;
 
+  @IsOptional()
+  @IsString()
+  territory?: string;
+
+  @IsOptional()
   @IsUrl()
-  @IsOptional()
-  sourceUrl?: string | null;
+  sourceUrl?: string;
 
-  @IsString()
   @IsOptional()
-  notes?: string | null;
+  @IsString()
+  notes?: string;
 }

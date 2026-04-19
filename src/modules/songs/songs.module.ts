@@ -1,22 +1,12 @@
 import { Module } from '@nestjs/common';
-import { SongService } from './song.service';
-import { SongScraperService } from './song-scraper.service';
+import { SongsController } from './songs.controller';
+import { SongsService } from './songs.service';
 import { SongsRepository } from './songs.repository';
-import { SongsCron } from './songs.cron';
-import { SpotifyMetadataService } from '../scraper/services/spotify-metadata.service';
-import { AlbumsModule } from '../albums/albums.module';
-import { EntityResolutionService } from '../catalog/entity-resolution.service';
+import { ArtistsRepository } from '../artists/artists.repository';
 
 @Module({
-  imports: [AlbumsModule],
-  providers: [
-    SongService,
-    SongScraperService,
-    SongsRepository,
-    SpotifyMetadataService,
-    SongsCron,
-    EntityResolutionService,
-  ],
-  exports: [SongService, SongScraperService],
+  controllers: [SongsController],
+  providers: [SongsService, SongsRepository, ArtistsRepository],
+  exports: [SongsService, SongsRepository],
 })
 export class SongsModule {}

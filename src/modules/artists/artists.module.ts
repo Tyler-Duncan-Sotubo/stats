@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
+import { ArtistsController } from './artists.controller';
 import { ArtistsService } from './artists.service';
 import { ArtistsRepository } from './artists.repository';
-import { ScraperModule } from '../scraper/scraper.module';
 
 @Module({
-  imports: [ScraperModule],
+  controllers: [ArtistsController],
   providers: [ArtistsService, ArtistsRepository],
   exports: [ArtistsService, ArtistsRepository],
 })
