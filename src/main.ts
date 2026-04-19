@@ -37,9 +37,11 @@ async function bootstrap() {
   });
 
   app.enableCors({
-    origin: [process.env.CLIENT_URL].filter(
-      (url): url is string => typeof url === 'string',
-    ),
+    origin: [
+      process.env.CLIENT_URL,
+      'http://localhost:3000',
+      'https://stats-client-production.up.railway.app',
+    ].filter((url): url is string => typeof url === 'string'),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
