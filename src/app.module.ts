@@ -29,12 +29,6 @@ import { ThrottlerModule } from '@nestjs/throttler';
         COOKIE_SECRET: Joi.string().required(),
         PORT: Joi.number().default(8000),
         REDIS_URL: Joi.string().required(),
-        SPOTIFY_CLIENT_ID: Joi.string().required(),
-        SPOTIFY_CLIENT_SECRET: Joi.string().required(),
-        DATABASE_NAME: Joi.string().required(),
-        ADMIN_EMAIL: Joi.string().required(),
-        ADMIN_PASSWORD: Joi.string().required(),
-        ADMIN_COOKIE_SECRET: Joi.string().required(),
       }),
     }),
     LoggerModule.forRoot({
