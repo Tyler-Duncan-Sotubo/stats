@@ -12,6 +12,16 @@ const DIRECT_ANSWERS: DirectAnswerRule[] = [
     answer:
       'Hip-hop/rap is the most streamed genre on Spotify, accounting for roughly 30–32% of all streams globally, followed by pop at about 25–28%.',
   },
+  {
+    patterns: [
+      'is afrobeats the fastest growing music genre',
+      'is afrobeats the fastest growing genre',
+      'fastest growing music genre afrobeats',
+      'is afrobeats growing fastest',
+    ],
+    answer:
+      'Afrobeats is widely regarded as one of the fastest-growing music genres globally, although TooXclusive Stats does not track genre-level growth directly.',
+  },
 ];
 
 function normalize(input: string): string {
