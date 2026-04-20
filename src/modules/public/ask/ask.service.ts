@@ -10,6 +10,7 @@ import { ChartsService } from '../charts/charts.service';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { AskRepository } from 'src/modules/public/ask/ask.repository';
 import { SongsService } from '../songs/songs.service';
+import { getDirectAnswer } from 'src/utils/ask-direct-answers';
 
 export interface AskResult {
   answer: string;
@@ -164,6 +165,17 @@ export class AskService {
     if (question.length > 200) {
       return {
         answer: 'Please keep your question under 200 characters.',
+        toolUsed: null,
+        data: null,
+        slug: null,
+      };
+    }
+
+    const direct = getDirectAnswer(question);
+
+    if (direct) {
+      return {
+        answer: direct,
         toolUsed: null,
         data: null,
         slug: null,

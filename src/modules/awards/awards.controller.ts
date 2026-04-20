@@ -12,6 +12,7 @@ import {
   HttpStatus,
   UseGuards,
   UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { AwardsService } from './awards.service';
 import { AwardQueryDto } from './dto/award-query.dto';
@@ -20,6 +21,8 @@ import { UpdateAwardDto } from './dto/update-award.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileParseInterceptor } from 'src/common/interceptors/file-parse.interceptor';
 import { AwardsBulkService } from './awards-bulk.service';
+import { AwardBulkRow } from './dto/bulk-create-awards.dto';
+
 @Controller('awards')
 @UseGuards(JwtAuthGuard)
 export class AwardsController {
@@ -47,6 +50,19 @@ export class AwardsController {
   @Post('bulk')
   @UseInterceptors(FileParseInterceptor({ field: 'file', maxRows: 500 }))
   bulkCreate(@Body() rows: any[]) {
+    return this.awardsBulkService.bulkCreate(rows);
+  }
+
+  @Post('bulk-json')
+  bulkCreateFromJson(@Body() body: AwardBulkRow[] | { rows: AwardBulkRow[] }) {
+    const rows = Array.isArray(body) ? body : body?.rows;
+
+    if (!Array.isArray(rows)) {
+      throw new BadRequestException(
+        'Body must be an array of awards or an object like { "rows": [...] }',
+      );
+    }
+
     return this.awardsBulkService.bulkCreate(rows);
   }
 
