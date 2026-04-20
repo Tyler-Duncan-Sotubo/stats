@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { SongsRepository } from './songs.repository';
-import type { PublicSong } from './songs.repository';
+import type { PublicSong, SongHistoryPoint } from './songs.repository';
 
 export interface PublicSongSearchResult {
   id: string;
@@ -68,6 +68,14 @@ export class SongsService {
       cacheKey,
       1800,
       () => this.songsRepository.searchSong(title, artistName),
+    );
+  }
+
+  async getSongHistory(slug: string): Promise<SongHistoryPoint[]> {
+    return this.cacheService.cached(
+      `public:songs:history:${slug}`,
+      CacheService.TTL.MEDIUM,
+      () => this.songsRepository.getSongHistory(slug),
     );
   }
 }

@@ -46,6 +46,29 @@ export interface PublicSongFeature {
   artistImageUrl: string | null;
 }
 
+export interface SongHistoryPoint {
+  date: string;
+  totalStreams: number | null;
+  dailyStreams: number | null;
+  dailyGrowth: number | null;
+  growth7d: number | null;
+}
+
+export interface MilestoneSongEntry {
+  rank: number;
+  songId: string;
+  songTitle: string;
+  songSlug: string | null;
+  imageUrl: string | null;
+  artistId: string;
+  artistName: string;
+  artistSlug: string | null;
+  isAfrobeats: boolean;
+  totalStreams: number;
+  dailyStreams: number | null;
+  releaseDate: string | null;
+}
+
 @Injectable()
 export class SongsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -121,19 +144,26 @@ export class SongsRepository {
   async getIndexableSongs(
     limit: number,
     offset: number,
-  ): Promise<{ slug: string; updatedAt: string }[]> {
+  ): Promise<{ slug: string; updatedAt: string; totalStreams: number }[]> {
     const result = await this.db.execute(sql`
-    SELECT 
-      slug,
-      created_at AS "updatedAt"
-    FROM songs
-    WHERE entity_status = 'canonical'
-      AND slug IS NOT NULL
-      AND merged_into_song_id IS NULL
-    ORDER BY created_at DESC
+    SELECT
+      s.slug,
+      s.created_at          AS "updatedAt",
+      ss.total_spotify_streams AS "totalStreams"
+    FROM songs s
+    INNER JOIN song_stream_summary ss ON ss.song_id = s.id
+    WHERE s.entity_status = 'canonical'
+      AND s.slug IS NOT NULL
+      AND s.merged_into_song_id IS NULL
+      AND ss.total_spotify_streams >= 1000000
+    ORDER BY ss.total_spotify_streams DESC
     LIMIT ${limit} OFFSET ${offset}
   `);
-    return result.rows as { slug: string; updatedAt: string }[];
+    return result.rows as {
+      slug: string;
+      updatedAt: string;
+      totalStreams: number;
+    }[];
   }
 
   async searchSong(title: string, artistName?: string) {
@@ -163,5 +193,69 @@ export class SongsRepository {
   `);
 
     return result.rows[0] ?? null;
+  }
+
+  async getSongHistory(slug: string): Promise<SongHistoryPoint[]> {
+    const result = await this.db.execute(sql`
+    SELECT
+      sgs.snapshot_date   AS "date",
+      sgs.total_streams   AS "totalStreams",
+      sgs.daily_streams   AS "dailyStreams",
+      sgs.daily_growth    AS "dailyGrowth",
+      sgs.growth_7d       AS "growth7d"
+    FROM song_growth_summary sgs
+    JOIN songs s ON s.id = sgs.song_id
+    WHERE s.slug = ${slug}
+      AND s.entity_status = 'canonical'
+    ORDER BY sgs.snapshot_date ASC
+    LIMIT 90
+  `);
+    return result.rows as SongHistoryPoint[];
+  }
+
+  async getMilestoneSongs(params: {
+    threshold: number;
+    limit: number;
+    offset: number;
+  }): Promise<{ data: MilestoneSongEntry[]; total: number }> {
+    const { threshold, limit, offset } = params;
+
+    const result = await this.db.execute(sql`
+    SELECT
+      ROW_NUMBER() OVER (ORDER BY ss.total_spotify_streams DESC) AS rank,
+      s.id                        AS "songId",
+      s.title                     AS "songTitle",
+      s.slug                      AS "songSlug",
+      s.image_url                 AS "imageUrl",
+      a.id                        AS "artistId",
+      a.name                      AS "artistName",
+      a.slug                      AS "artistSlug",
+      s.is_afrobeats              AS "isAfrobeats",
+      ss.total_spotify_streams    AS "totalStreams",
+      ss.daily_streams            AS "dailyStreams",
+      s.release_date              AS "releaseDate"
+    FROM song_stream_summary ss
+    JOIN songs s ON s.id = ss.song_id
+    JOIN artists a ON a.id = s.artist_id
+    WHERE ss.total_spotify_streams >= ${threshold}
+      AND s.entity_status = 'canonical'
+      AND s.merged_into_song_id IS NULL
+    ORDER BY ss.total_spotify_streams DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+    const countResult = await this.db.execute(sql`
+    SELECT COUNT(*)::int AS total
+    FROM song_stream_summary ss
+    JOIN songs s ON s.id = ss.song_id
+    WHERE ss.total_spotify_streams >= ${threshold}
+      AND s.entity_status = 'canonical'
+      AND s.merged_into_song_id IS NULL
+  `);
+
+    return {
+      data: result.rows as MilestoneSongEntry[],
+      total: (countResult.rows[0] as any).total,
+    };
   }
 }

@@ -1,403 +1,38 @@
-// scripts/seed-ask-questions.ts
 const BASE_URL = process.env.SEED_URL ?? 'http://localhost:8000';
+const SKIP_IF_UPDATED_WITHIN_HOURS = parseInt(process.env.SKIP_HOURS ?? '6');
+const RATE_LIMIT_MS = parseInt(process.env.RATE_LIMIT_MS ?? '1500');
 
-// const SEED_QUESTIONS = [
-//   // ── Charts — Spotify ──────────────────────────────────────────────────────
-//   'what is topping spotify globally today',
-//   'what is number 1 on spotify globally',
-//   'what is number 1 on spotify nigeria',
-//   'what is number 1 on spotify south africa',
-//   'what is number 1 on spotify uk',
-//   'what is topping the nigerian spotify chart today',
-//   'what songs are on the spotify nigeria chart',
-//   'what songs are on the spotify global chart',
-//   'what songs are on the spotify uk chart',
-//   'which song is topping the nigerian chart today',
-//   'which song is topping the nigerian streaming numbers today',
-//   'which song is topping the uk chart today',
-//   'who is leading in spotify nigeria today',
-//   'who is leading in spotify daily song streams',
-//   'who is leading in spotify daily song streams in nigeria',
+function isStale(updatedAt: string | null): boolean {
+  if (!updatedAt) return true;
+  const hoursSinceUpdate =
+    (Date.now() - new Date(updatedAt).getTime()) / 1000 / 60 / 60;
+  return hoursSinceUpdate > SKIP_IF_UPDATED_WITHIN_HOURS;
+}
 
-//   // ── Charts — Apple Music ──────────────────────────────────────────────────
-//   'what is number 1 on apple music nigeria',
-//   'what is number 1 on apple music ghana',
-//   'what is number 1 on apple music kenya',
-//   'what is number 1 on apple music south africa',
-//   'what is number 1 on apple music uganda',
-//   'what songs are on the apple music nigeria chart',
+async function fetchQuestions(): Promise<
+  { slug: string; question: string; updatedAt: string | null }[]
+> {
+  const res = await fetch(`${BASE_URL}/api/public/ask/indexable`);
+  if (!res.ok) throw new Error(`Failed to fetch questions: ${res.status}`);
+  return res.json() as Promise<
+    { slug: string; question: string; updatedAt: string | null }[]
+  >;
+}
 
-//   // ── Charts — Official ─────────────────────────────────────────────────────
-//   'what is number 1 on the uk afrobeats chart',
-//   'what songs are on the uk afrobeats chart',
-//   'what is number 1 on the billboard hot 100',
-//   'what songs are on the billboard hot 100',
-//   'what songs are on the uk official singles chart',
-//   'what is number 1 on the uk singles chart',
-//   'what songs are on the tooxclusive top 100',
-//   'what is number 1 on the east africa top 50',
-//   'what is number 1 on the tooxclusive top 100',
-//   'which song is leading charts globally',
-
-//   // ── Artist stats — African ────────────────────────────────────────────────
-//   'how many streams does wizkid have',
-//   'how many streams does burna boy have',
-//   'how many streams does davido have',
-//   'how many streams does asake have',
-//   'how many streams does tems have',
-//   'how many streams does rema have',
-//   'how many streams does ayra starr have',
-//   'how many streams does omah lay have',
-//   'how many streams does ckay have',
-//   'how many streams does fireboy dml have',
-//   'how many streams does odumodublvck have',
-//   'how many streams does seyi vibez have',
-//   'how many streams does kizz daniel have',
-//   'how many streams does pheelz have',
-//   'how many streams does oxlade have',
-//   'how many streams does black sherif have',
-//   'how many streams does stonebwoy have',
-//   'how many streams does sarkodie have',
-//   'how many streams does diamond platnumz have',
-//   'how many monthly listeners does wizkid have',
-//   'how many monthly listeners does burna boy have',
-//   'how many monthly listeners does davido have',
-//   'how many monthly listeners does tems have',
-//   'how many monthly listeners does rema have',
-//   'how many monthly listeners does asake have',
-//   'how many daily streams does wizkid have',
-//   'how many daily streams does burna boy have',
-//   'how many daily streams does tems have',
-//   'how many daily streams does rema have',
-
-//   // ── Artist stats — Global ─────────────────────────────────────────────────
-//   'how many streams does drake have',
-//   'how many streams does bad bunny have',
-//   'how many streams does the weeknd have',
-//   'how many streams does taylor swift have',
-//   'how many streams does kendrick lamar have',
-//   'how many streams does ed sheeran have',
-//   'how many streams does post malone have',
-//   'how many streams does j cole have',
-//   'how many streams does travis scott have',
-//   'how many streams does 21 savage have',
-//   'how many monthly listeners does drake have',
-//   'how many monthly listeners does the weeknd have',
-//   'how many monthly listeners does taylor swift have',
-//   'how many monthly listeners does bad bunny have',
-//   'give me taylor swifts spotify numbers',
-//   'give me the latest numbers for kendrick lamar',
-
-//   // ── Specific songs ────────────────────────────────────────────────────────
-//   'how many streams does calm down with selena gomez have',
-//   'how many streams does calm down by rema have',
-//   'what is rema most streamed song',
-//   'what is rema biggest song',
-//   'how many streams does love nwantiti have',
-//   'how many streams does essence have',
-//   'how many streams does free mind have tems',
-//   'how many streams does bloody civilian have tems',
-//   'how many streams does ye have burna boy',
-//   'how many streams does last last have',
-//   'how many streams does outside have',
-//   'how many streams does ojuelegba have',
-//   'how many streams does on the ground have',
-//   'how many streams does rush have',
-//   'how many streams does science student have',
-//   'how many streams does unfortunate have',
-//   'how many streams does organise have',
-
-//   // ── Milestones ────────────────────────────────────────────────────────────
-//   'has wizkid hit 10 billion streams',
-//   'has burna boy hit 10 billion streams',
-//   'has tems hit 1 billion streams',
-//   'has rema hit 1 billion streams',
-//   'has rema hit 2 billion streams',
-//   'has ckay hit 1 billion streams',
-//   'which afrobeats song has the most streams ever',
-//   'what is the most streamed afrobeats song of all time',
-//   'what is the most streamed african song ever',
-//   'what is the most streamed nigerian song ever',
-//   'which nigerian song has the most streams',
-//   'which african artist has 1 billion streams',
-//   'which african artist has 10 billion streams',
-
-//   // ── Leaderboards — African ────────────────────────────────────────────────
-//   'who is the most streamed african artist',
-//   'who is the most streamed afrobeats artist',
-//   'who is the most streamed nigerian artist',
-//   'who has the most streams in nigeria',
-//   'who has the most streams in ghana',
-//   'who has the most streams in south africa',
-//   'who has the most streams in kenya',
-//   'who has the most streams in uganda',
-//   'who has the most streams in tanzania',
-//   'who has the most streams in east africa',
-//   'who is the biggest artist in nigeria',
-//   'who is the biggest artist in ghana',
-//   'who is the biggest artist in south africa',
-//   'who is the biggest artist in kenya',
-//   'who is the most famous nigerian artist',
-//   'who is the most famous ghanaian artist',
-//   'top 10 most streamed african artists',
-//   'top 10 afrobeats artists by streams',
-//   'top 10 nigerian artists on spotify',
-//   'top 10 ghanaian artists on spotify',
-//   'top 10 south african artists on spotify',
-//   'top 10 kenyan artists on spotify',
-//   'top 10 african artists by monthly listeners',
-//   'who are the top artists in east africa',
-//   'top 5 most streamed afrobeats songs',
-//   'is rema the most streamed nigerian artist',
-//   'is davido the most streamed nigerian artist',
-//   'is wizkid the most streamed african artist',
-//   'is burna boy the most streamed african artist',
-//   'is burna boy bigger than wizkid',
-//   'is rema bigger than wizkid',
-//   'is tems the most streamed female african artist',
-
-//   // ── Leaderboards — Global ─────────────────────────────────────────────────
-//   'who has the most spotify streams',
-//   'who has the most monthly listeners on spotify',
-//   'who has the most daily streams on spotify',
-//   'who has the most streams on spotify globally',
-//   'who is the most streamed artist in the world',
-//   'who has the most streams in the uk',
-//   'who has the most streams in the us',
-//   'who has the highest monthly listeners',
-//   'top 10 most streamed artists on spotify',
-//   'top 10 most streamed songs on spotify',
-//   'top 10 artists with most monthly listeners',
-//   'top 10 most streamed songs ever',
-//   'who are the top 5 artists on spotify',
-//   'top 10 uk artists on spotify',
-//   'top 10 us artists on spotify',
-//   'who has the most spotify streams overall',
-
-//   // ── Trending ──────────────────────────────────────────────────────────────
-//   'who is trending on spotify today',
-//   'which afrobeats artist is growing fastest',
-//   'who is the fastest growing african artist',
-//   'which nigerian artist is trending today',
-//   'what afrobeats songs are trending today',
-//   'who is trending in nigeria today',
-//   'who is trending in south africa today',
-//   'who is trending in ghana today',
-//   'who is trending in kenya today',
-//   'what songs are trending globally today',
-//   'who is growing fastest on spotify globally',
-//   'is asake the fastest rising nigerian artist',
-
-//   // ── Awards & records ──────────────────────────────────────────────────────
-//   'how many grammy nominations does burna boy have',
-//   'how many grammys does burna boy have',
-//   'has wizkid won a grammy',
-//   'how many grammys has wizkid won',
-//   'has tems won a grammy',
-//   'how many awards does davido have',
-//   'who is the most awarded african artist',
-
-//   // ── Chart history ─────────────────────────────────────────────────────────
-//   'has wizkid been number 1 in the uk',
-//   'has burna boy been number 1 in the uk',
-//   'has tems been number 1 in the uk',
-//   'has rema been number 1 in the uk',
-//   'which afrobeats artist has the most uk chart weeks',
-//   'which afrobeats song spent the most weeks on the uk chart',
-//   'has any african artist topped the billboard hot 100',
-//   'which african artist has charted on billboard',
-//   'wizkid uk chart history',
-//   'burna boy uk chart history',
-//   'tems uk chart history',
-
-//   // ── Artist specific ───────────────────────────────────────────────────────
-//   'what charts has rema appeared on',
-//   'what position is rema on the leaderboard',
-//   'where is tyler the creator ranked globally',
-//   'who is the best artist in nigeria today',
-//   'who is the best artist in kenya today',
-//   'who is the king of afrobeats',
-//   'who is the queen of afrobeats',
-//   'who is the best afrobeats artist of all time',
-//   'who is the biggest afrobeats artist in the world',
-//   'who is the most popular african artist',
-//   'who is the number 1 afrobeats artist',
-//   'who is the biggest african artist right now',
-// ];
-
-const SEED_QUESTIONS = [
-  // ── Bruno Mars (rank 1) ───────────────────────────────────────────────────
-  'how many monthly listeners does bruno mars have',
-  'how many streams does bruno mars have',
-  'what is bruno mars biggest song',
-
-  // ── The Weeknd ────────────────────────────────────────────────────────────
-  'how many monthly listeners does the weeknd have',
-  'how many streams does blinding lights have',
-  'what is the weeknd most streamed song',
-
-  // ── Justin Bieber ─────────────────────────────────────────────────────────
-  'how many monthly listeners does justin bieber have',
-  'how many streams does justin bieber have',
-  'what is justin bieber most streamed song',
-
-  // ── Rihanna ───────────────────────────────────────────────────────────────
-  'how many monthly listeners does rihanna have',
-  'how many streams does rihanna have',
-
-  // ── Lady Gaga ─────────────────────────────────────────────────────────────
-  'how many monthly listeners does lady gaga have',
-  'how many streams does lady gaga have',
-  'how many grammys does lady gaga have',
-
-  // ── Coldplay ──────────────────────────────────────────────────────────────
-  'how many monthly listeners does coldplay have',
-  'how many streams does coldplay have',
-
-  // ── Billie Eilish ─────────────────────────────────────────────────────────
-  'how many monthly listeners does billie eilish have',
-  'how many streams does billie eilish have',
-  'how many grammys does billie eilish have',
-
-  // ── Ariana Grande ─────────────────────────────────────────────────────────
-  'how many monthly listeners does ariana grande have',
-  'how many streams does ariana grande have',
-
-  // ── Shakira ───────────────────────────────────────────────────────────────
-  'how many monthly listeners does shakira have',
-  'how many streams does shakira have',
-
-  // ── Kanye West ────────────────────────────────────────────────────────────
-  'how many monthly listeners does kanye west have',
-  'how many streams does kanye west have',
-
-  // ── SZA ───────────────────────────────────────────────────────────────────
-  'how many monthly listeners does sza have',
-  'how many streams does sza have',
-  'how many grammys has sza won',
-
-  // ── Zara Larsson ──────────────────────────────────────────────────────────
-  'how many monthly listeners does zara larsson have',
-  'how many streams does zara larsson have',
-
-  // ── Sabrina Carpenter ─────────────────────────────────────────────────────
-  'how many monthly listeners does sabrina carpenter have',
-  'how many streams does sabrina carpenter have',
-  'how many grammys has sabrina carpenter won',
-
-  // ── Travis Scott ──────────────────────────────────────────────────────────
-  'how many monthly listeners does travis scott have',
-
-  // ── Lana Del Rey ──────────────────────────────────────────────────────────
-  'how many monthly listeners does lana del rey have',
-  'how many streams does lana del rey have',
-
-  // ── Dua Lipa ──────────────────────────────────────────────────────────────
-  'how many monthly listeners does dua lipa have',
-  'how many streams does dua lipa have',
-  'how many grammys has dua lipa won',
-
-  // ── Chris Brown ───────────────────────────────────────────────────────────
-  'how many monthly listeners does chris brown have',
-  'how many streams does chris brown have',
-  'how many grammys has chris brown won',
-
-  // ── Miley Cyrus ───────────────────────────────────────────────────────────
-  'how many monthly listeners does miley cyrus have',
-  'how many streams does miley cyrus have',
-  'how many grammys has miley cyrus won',
-
-  // ── Olivia Rodrigo ────────────────────────────────────────────────────────
-  'how many monthly listeners does olivia rodrigo have',
-  'how many streams does olivia rodrigo have',
-  'how many grammys has olivia rodrigo won',
-
-  // ── Post Malone ───────────────────────────────────────────────────────────
-  'how many monthly listeners does post malone have',
-
-  // ── Doja Cat ──────────────────────────────────────────────────────────────
-  'how many monthly listeners does doja cat have',
-  'how many streams does doja cat have',
-
-  // ── Nicki Minaj ───────────────────────────────────────────────────────────
-  'how many monthly listeners does nicki minaj have',
-  'how many streams does nicki minaj have',
-
-  // ── Tems (global rank 91) ─────────────────────────────────────────────────
-  'what global rank is tems on spotify',
-  'where does tems rank globally on spotify',
-  'how does tems rank globally by monthly listeners',
-
-  // ── Tyla (rank 175) ───────────────────────────────────────────────────────
-  'how many monthly listeners does tyla have',
-  'where does tyla rank globally on spotify',
-
-  // ── Burna Boy (rank 313) ──────────────────────────────────────────────────
-  'where does burna boy rank globally on spotify',
-  'what is burna boy global rank on spotify',
-
-  // ── Rema (rank 326) ───────────────────────────────────────────────────────
-  'where does rema rank globally on spotify',
-  'what is rema global rank on spotify',
-
-  // ── Wizkid (rank 476) ────────────────────────────────────────────────────
-  'where does wizkid rank globally on spotify',
-  'what is wizkid global rank on spotify',
-
-  // ── Davido (rank 1278) ───────────────────────────────────────────────────
-  'where does davido rank globally on spotify',
-  'how many monthly listeners does davido have',
-
-  // ── Omah Lay (rank 928) ──────────────────────────────────────────────────
-  'how many monthly listeners does omah lay have',
-  'where does omah lay rank globally on spotify',
-
-  // ── Ayra Starr (rank 573) ────────────────────────────────────────────────
-  'how many monthly listeners does ayra starr have',
-  'where does ayra starr rank globally on spotify',
-
-  // ── Asake (rank 1422) ────────────────────────────────────────────────────
-  'how many monthly listeners does asake have',
-  'where does asake rank globally on spotify',
-
-  // ── Fireboy DML (rank 1533) ──────────────────────────────────────────────
-  'how many monthly listeners does fireboy dml have',
-
-  // ── CKay (rank 1223) ─────────────────────────────────────────────────────
-  'how many monthly listeners does ckay have',
-
-  // ── Global comparisons ───────────────────────────────────────────────────
-  'who has more monthly listeners tems or nicki minaj',
-  'who has more monthly listeners rema or dua lipa',
-  'who has more monthly listeners burna boy or chris brown',
-  'who has more monthly listeners wizkid or travis scott',
-  'who has more monthly listeners tyla or olivia rodrigo',
-  'is tems in the top 100 most listened artists on spotify',
-  'is burna boy in the top 500 most listened artists on spotify',
-  'which african artist has the highest global monthly listeners',
-  'which african artist ranks highest globally on spotify',
-
-  // ── Leaderboards ─────────────────────────────────────────────────────────
-  'who has the most monthly listeners on spotify right now',
-  'top 10 artists with most monthly listeners globally',
-  'top 5 artists with most monthly listeners on spotify',
-  'who is number 1 for monthly listeners on spotify',
-];
-
-async function ask(question: string): Promise<void> {
+async function reask(question: string): Promise<void> {
   try {
-    const res = await fetch(`${BASE_URL}/api/public/ask`, {
+    const askRes = await fetch(`${BASE_URL}/api/public/ask`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
     });
 
-    if (!res.ok) {
-      console.error(`❌ [${res.status}] ${question}`);
+    if (!askRes.ok) {
+      console.error(`❌ Ask failed [${askRes.status}] ${question}`);
       return;
     }
 
-    const data = await res.json();
+    const data = await askRes.json();
     console.log(`✅ ${question}`);
     console.log(`   → ${data.toolUsed} | ${data.answer?.slice(0, 80)}...\n`);
   } catch (err) {
@@ -406,19 +41,20 @@ async function ask(question: string): Promise<void> {
 }
 
 async function seed(): Promise<void> {
+  const all = await fetchQuestions();
+  const stale = all.filter((q) => isStale(q.updatedAt));
+  const skipped = all.length - stale.length;
+
   console.log(
-    `🌱 Seeding ${SEED_QUESTIONS.length} questions against ${BASE_URL}\n`,
+    `🌱 ${all.length} total — ${skipped} fresh, refreshing ${stale.length}\n`,
   );
 
-  for (const question of SEED_QUESTIONS) {
-    await ask(question);
-    // Rate limit — avoid hammering OpenAI and your own API
-    await new Promise((r) => setTimeout(r, 1500));
+  for (const { question } of stale) {
+    await reask(question);
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
   }
 
-  console.log(
-    `\n✅ Seed complete — ${SEED_QUESTIONS.length} questions processed`,
-  );
+  console.log(`\n✅ Done — ${stale.length} refreshed, ${skipped} skipped`);
 }
 
 void seed();

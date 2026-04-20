@@ -7,19 +7,16 @@ import {
   Query,
 } from '@nestjs/common';
 import { SongsService } from './songs.service';
+import { ArtistsService } from '../artists/artists.service';
 
 @Controller('public/songs')
 export class SongsController {
-  constructor(private readonly songsService: SongsService) {}
+  constructor(
+    private readonly songsService: SongsService,
+    private readonly artistsService: ArtistsService,
+  ) {}
 
-  /**
-   * GET /public/songs/:slug
-   * Full song profile with streams, chart history, featured artists
-   */
-  @Get(':slug')
-  getBySlug(@Param('slug') slug: string) {
-    return this.songsService.getBySlug(slug);
-  }
+  // ── Static routes first ───────────────────────────────────────────────────
 
   @Get('indexable')
   async getIndexableSongs(
@@ -35,5 +32,25 @@ export class SongsController {
     @Query('artistName') artistName?: string,
   ) {
     return this.songsService.searchSong(title, artistName);
+  }
+
+  // ── Parameterized routes last ─────────────────────────────────────────────
+
+  @Get(':slug/history')
+  async getSongHistory(@Param('slug') slug: string) {
+    return this.songsService.getSongHistory(slug);
+  }
+
+  @Get(':slug/songs')
+  async getArtistSongs(
+    @Param('slug') slug: string,
+    @Query('limit') limit = 20,
+  ) {
+    return this.artistsService.getArtistSongs(slug, Number(limit));
+  }
+
+  @Get(':slug')
+  getBySlug(@Param('slug') slug: string) {
+    return this.songsService.getBySlug(slug);
   }
 }

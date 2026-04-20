@@ -143,6 +143,7 @@ export class AskRepository {
       .select({
         slug: askQuestions.slug,
         updatedAt: askQuestions.lastAsked,
+        question: askQuestions.question,
       })
       .from(askQuestions)
       .where(

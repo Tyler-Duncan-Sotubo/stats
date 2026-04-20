@@ -39,6 +39,15 @@ export interface ChartFilters {
   limit?: number;
 }
 
+export interface AfrobeatsUkSummary {
+  totalEntries: number;
+  uniqueArtists: number;
+  weeksTracked: number;
+  weeksAtNumber1: number;
+  topArtists: { artistName: string; entries: number; bestPosition: number }[];
+  latestWeek: string;
+}
+
 @Injectable()
 export class ChartsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -98,5 +107,40 @@ export class ChartsRepository {
   `);
 
     return result.rows as ChartEntry[];
+  }
+
+  async getAfrobeatsUkSummary(): Promise<AfrobeatsUkSummary> {
+    const result = await this.db.execute(sql`
+    SELECT
+      COUNT(*)::int                                      AS "totalEntries",
+      COUNT(DISTINCT artist_id)::int                     AS "uniqueArtists",
+      COUNT(DISTINCT chart_week)::int                    AS "weeksTracked",
+      COUNT(*) FILTER (WHERE position = 1)::int          AS "weeksAtNumber1",
+      MAX(chart_week)                                    AS "latestWeek"
+    FROM chart_latest_leaderboard
+    WHERE chart_name = 'official_afrobeats_chart'
+      AND chart_territory = 'UK'
+  `);
+
+    const topArtistsResult = await this.db.execute(sql`
+    SELECT
+      artist_name                    AS "artistName",
+      COUNT(*)::int                  AS "entries",
+      MIN(peak_position)::int        AS "bestPosition"
+    FROM chart_latest_leaderboard
+    WHERE chart_name = 'official_afrobeats_chart'
+      AND chart_territory = 'UK'
+    GROUP BY artist_id, artist_name
+    ORDER BY entries DESC
+    LIMIT 5
+  `);
+
+    const summary = result.rows[0] as any;
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return {
+      ...summary,
+      topArtists: topArtistsResult.rows as AfrobeatsUkSummary['topArtists'],
+    };
   }
 }

@@ -111,6 +111,39 @@ export interface BrowseArtistsResult {
   total: number;
 }
 
+export interface ArtistSongEntry {
+  id: string;
+  title: string;
+  slug: string | null;
+  imageUrl: string | null;
+  releaseDate: string | null;
+  spotifyTrackId: string | null;
+  isAfrobeats: boolean;
+  explicit: boolean;
+  totalStreams: number | null;
+  dailyStreams: number | null;
+}
+
+export interface ArtistHistoryPoint {
+  date: string;
+  totalStreams: number | null;
+  dailyStreams: number | null;
+  dailyGrowth: number | null;
+  growth7d: number | null;
+}
+
+export interface MilestoneArtistEntry {
+  rank: number;
+  artistId: string;
+  artistName: string;
+  artistSlug: string | null;
+  imageUrl: string | null;
+  originCountry: string | null;
+  isAfrobeats: boolean;
+  totalStreams: number;
+  dailyStreams: number | null;
+}
+
 @Injectable()
 export class ArtistsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -379,5 +412,91 @@ export class ArtistsRepository {
     LIMIT ${limit} OFFSET ${offset}
   `);
     return result.rows as { slug: string; updatedAt: string }[];
+  }
+
+  async getArtistSongs(
+    slug: string,
+    limit: number,
+  ): Promise<ArtistSongEntry[]> {
+    const result = await this.db.execute(sql`
+    SELECT
+      s.id,
+      s.title,
+      s.slug,
+      s.image_url         AS "imageUrl",
+      s.release_date      AS "releaseDate",
+      s.spotify_track_id  AS "spotifyTrackId",
+      s.is_afrobeats      AS "isAfrobeats",
+      s.explicit,
+      ss.total_spotify_streams  AS "totalStreams",
+      ss.daily_streams          AS "dailyStreams"
+    FROM songs s
+    JOIN artists a ON a.id = s.artist_id
+    LEFT JOIN song_stream_summary ss ON ss.song_id = s.id
+    WHERE a.slug = ${slug}
+      AND s.entity_status = 'canonical'
+      AND s.merged_into_song_id IS NULL
+    ORDER BY ss.total_spotify_streams DESC NULLS LAST
+    LIMIT ${limit}
+  `);
+    return result.rows as ArtistSongEntry[];
+  }
+
+  async getArtistHistory(slug: string): Promise<ArtistHistoryPoint[]> {
+    const result = await this.db.execute(sql`
+    SELECT
+      ags.snapshot_date   AS "date",
+      ags.total_streams   AS "totalStreams",
+      ags.daily_streams   AS "dailyStreams",
+      ags.daily_growth    AS "dailyGrowth",
+      ags.growth_7d       AS "growth7d"
+    FROM artist_growth_summary ags
+    JOIN artists a ON a.id = ags.artist_id
+    WHERE a.slug = ${slug}
+    ORDER BY ags.snapshot_date ASC
+    LIMIT 90
+  `);
+    return result.rows as ArtistHistoryPoint[];
+  }
+
+  async getMilestoneArtists(params: {
+    threshold: number;
+    isAfrobeats?: boolean;
+    limit: number;
+    offset: number;
+  }): Promise<{ data: MilestoneArtistEntry[]; total: number }> {
+    const { threshold, isAfrobeats, limit, offset } = params;
+
+    const result = await this.db.execute(sql`
+    SELECT
+      ROW_NUMBER() OVER (ORDER BY ass.total_streams DESC) AS rank,
+      a.id              AS "artistId",
+      a.name            AS "artistName",
+      a.slug            AS "artistSlug",
+      a.image_url       AS "imageUrl",
+      a.origin_country  AS "originCountry",
+      a.is_afrobeats    AS "isAfrobeats",
+      ass.total_streams AS "totalStreams",
+      ass.daily_streams AS "dailyStreams"
+    FROM artist_stream_summary ass
+    JOIN artists a ON a.id = ass.artist_id
+    WHERE ass.total_streams >= ${threshold}
+      ${isAfrobeats ? sql`AND a.is_afrobeats = true` : sql``}
+    ORDER BY ass.total_streams DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+    const countResult = await this.db.execute(sql`
+    SELECT COUNT(*)::int AS total
+    FROM artist_stream_summary ass
+    JOIN artists a ON a.id = ass.artist_id
+    WHERE ass.total_streams >= ${threshold}
+      ${isAfrobeats ? sql`AND a.is_afrobeats = true` : sql``}
+  `);
+
+    return {
+      data: result.rows as MilestoneArtistEntry[],
+      total: (countResult.rows[0] as any).total,
+    };
   }
 }

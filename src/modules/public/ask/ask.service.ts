@@ -49,6 +49,7 @@ AFROBEATS / AFRICAN RULES — CRITICAL:
 - "which african artist has X streams" → get_leaderboard_streams isAfrobeats=true
 - "nigerian artist", "ghanaian artist" etc → set country only, do NOT set isAfrobeats
 - NEVER return global leaderboard for african/afrobeats questions
+- "is afrobeats popular in the uk" / "afrobeats in the uk" / "uk afrobeats scene" → use get_afrobeats_uk_summary
 
 Country code mapping — use these exact codes:
 - Nigeria / Nigerian → NG
@@ -222,11 +223,9 @@ export class AskService {
     'which country streams the most',
     'how many afrobeats artists are on spotify',
     'how many artists are on spotify',
-    'how popular is afrobeats',
     'fastest growing genre',
     'most streamed genre',
     'how many streams does afrobeats have',
-    'is afrobeats popular in',
     'who has the most daily streams on spotify',
     'who has the most daily streams',
     'who is the most awarded african artist',
@@ -441,6 +440,10 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
         return `"${data.title}" by ${data.artistName} has ${Number(data.totalStreams).toLocaleString()} Spotify streams.`;
       }
 
+      case 'get_afrobeats_uk_summary': {
+        return `Afrobeats has strong UK presence — ${data.uniqueArtists} artists have appeared on the official UK Afrobeats chart across ${data.weeksTracked} weeks, with ${data.weeksAtNumber1} weeks producing a #1. Top artists include ${data.topArtists.map((a: any) => a.artistName).join(', ')}.`;
+      }
+
       case 'get_chart': {
         const top = data.data?.[0];
         if (!top) return 'No chart data found.';
@@ -579,6 +582,9 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
       case 'get_artist':
         return this.artistService.getBySlug(params.slug);
 
+      case 'get_afrobeats_uk_summary':
+        return this.chartService.getAfrobeatsUkSummary();
+
       case 'get_song':
         return this.songsService.searchSong(params.title, params.artistName);
 
@@ -672,6 +678,9 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
             recordValue: r.recordValue,
           })),
         };
+
+      case 'get_afrobeats_uk_summary':
+        return data;
 
       case 'get_song':
         return {

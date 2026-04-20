@@ -1,7 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { ChartsRepository } from './charts.repository';
-import type { ChartEntry, AvailableChart } from './charts.repository';
+import type {
+  ChartEntry,
+  AvailableChart,
+  AfrobeatsUkSummary,
+} from './charts.repository';
 
 export interface ChartResponse {
   chartName: string;
@@ -57,6 +61,14 @@ export class ChartsService {
           meta: { total: data.length },
         };
       },
+    );
+  }
+
+  async getAfrobeatsUkSummary(): Promise<AfrobeatsUkSummary> {
+    return this.cacheService.cached(
+      'public:charts:afrobeats-uk-summary',
+      CacheService.TTL.LONG,
+      () => this.chartsRepository.getAfrobeatsUkSummary(),
     );
   }
 }

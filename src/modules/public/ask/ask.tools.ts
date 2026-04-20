@@ -190,6 +190,19 @@ export const ASK_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_afrobeats_uk_summary',
+      description:
+        'Get aggregated stats on Afrobeats popularity in the UK based on the official UK Afrobeats chart',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
 ];
 
 export const TOOL_ENDPOINT_MAP: Record<string, string> = {

@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { ArtistsRepository } from './artists.repository';
-import type { PublicArtist, BrowseArtistEntry } from './artists.repository';
+import type {
+  PublicArtist,
+  BrowseArtistEntry,
+  ArtistSongEntry,
+  ArtistHistoryPoint,
+} from './artists.repository';
 
 export interface BrowseArtistsParams {
   limit?: number;
@@ -110,6 +115,22 @@ export class ArtistsService {
           },
         };
       },
+    );
+  }
+
+  async getArtistSongs(slug: string, limit = 20): Promise<ArtistSongEntry[]> {
+    return this.cacheService.cached(
+      `public:artists:songs:${slug}:${limit}`,
+      CacheService.TTL.MEDIUM,
+      () => this.artistsRepository.getArtistSongs(slug, limit),
+    );
+  }
+
+  async getArtistHistory(slug: string): Promise<ArtistHistoryPoint[]> {
+    return this.cacheService.cached(
+      `public:artists:history:${slug}`,
+      CacheService.TTL.MEDIUM,
+      () => this.artistsRepository.getArtistHistory(slug),
     );
   }
 }

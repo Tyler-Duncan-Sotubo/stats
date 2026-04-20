@@ -25,6 +25,9 @@ import { AskController } from './ask/ask.controller';
 import { AskService } from './ask/ask.service';
 import { AskRepository } from './ask/ask.repository';
 
+import { MilestonesController } from './milestone/milestones.controller';
+import { MilestonesService } from './milestone/milestones.service';
+
 @Module({
   imports: [CacheModule],
   controllers: [
@@ -34,6 +37,7 @@ import { AskRepository } from './ask/ask.repository';
     ChartsController,
     LeaderboardController,
     AskController,
+    MilestonesController,
   ],
   providers: [
     TrendingService,
@@ -48,6 +52,7 @@ import { AskRepository } from './ask/ask.repository';
     LeaderboardRepository,
     AskService,
     AskRepository,
+    MilestonesService,
   ],
 })
 export class PublicModule {}

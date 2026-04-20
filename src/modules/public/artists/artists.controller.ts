@@ -36,6 +36,18 @@ export class ArtistsController {
     });
   }
 
+  @Get('indexable')
+  async getIndexableArtists(
+    @Query('limit', new DefaultValuePipe(5000), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+  ) {
+    return this.artistsService.getIndexableArtists(limit, offset);
+  }
+  @Get(':slug/history')
+  async getArtistHistory(@Param('slug') slug: string) {
+    return this.artistsService.getArtistHistory(slug);
+  }
+
   /**
    * GET /public/artists/:slug
    * Full artist profile
@@ -43,13 +55,5 @@ export class ArtistsController {
   @Get(':slug')
   getBySlug(@Param('slug') slug: string) {
     return this.artistsService.getBySlug(slug);
-  }
-
-  @Get('indexable')
-  async getIndexableArtists(
-    @Query('limit', new DefaultValuePipe(5000), ParseIntPipe) limit: number,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
-  ) {
-    return this.artistsService.getIndexableArtists(limit, offset);
   }
 }
