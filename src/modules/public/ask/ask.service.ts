@@ -39,8 +39,18 @@ SONG ROUTING RULES:
 - "streams for [song]" → use get_song
 - "[song] streams" where no artist name is present → use get_song
 - "most streamed song ever" / "most streamed song overall" → use get_leaderboard_songs
+- "top songs by [artist]" → use get_artist_top_songs with slug=[artist]
+- "top 10 [artist] songs" → use get_artist_top_songs with slug=[artist], limit=10
+- "[artist] top songs" → use get_artist_top_songs with slug=[artist]
+- "most streamed [artist] songs" → use get_artist_top_songs with slug=[artist]
+- "[artist] biggest songs" → use get_artist_top_songs with slug=[artist]
 - "top songs" / "biggest songs on spotify" → use get_leaderboard_songs
 - "trending songs" / "fastest growing songs" → use get_trending_songs
+- "who sang [song]" → use get_song with title=[song]
+- "who sings [song]" → use get_song with title=[song]
+- "who made [song]" → use get_song with title=[song]
+- "who is [song] by" → use get_song with title=[song]
+- "[song] by who" → use get_song with title=[song]
 
 AFROBEATS / AFRICAN RULES — CRITICAL:
 - "african artist", "african artists", "african music" → ALWAYS set isAfrobeats=true, NO EXCEPTIONS
@@ -449,7 +459,26 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
     switch (toolName) {
       case 'get_song': {
         if (!data) return 'No stream data found for that song.';
-        return `"${data.title}" by ${data.artistName} has ${Number(data.totalStreams).toLocaleString()} Spotify streams.`;
+
+        const streams = data.totalStreams
+          ? Number(data.totalStreams).toLocaleString()
+          : null;
+
+        const isWhoQuestion =
+          /\bwho\b/i.test(question) &&
+          (/\b(sang|sings|made|performed|does|did)\b/i.test(question) ||
+            /\bwho\s+is\b/i.test(question) ||
+            /\bby\s+who\b/i.test(question));
+
+        if (isWhoQuestion) {
+          return streams
+            ? `"${data.title}" is by ${data.artistName} with ${streams} Spotify streams.`
+            : `"${data.title}" is by ${data.artistName}.`;
+        }
+
+        return streams
+          ? `"${data.title}" by ${data.artistName} has ${streams} Spotify streams.`
+          : `"${data.title}" is by ${data.artistName}.`;
       }
 
       case 'get_afrobeats_uk_summary': {
@@ -560,6 +589,13 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
         return `"${top.title}" by ${top.artistName} is trending fastest with +${Number(top.dailyGrowth).toLocaleString()} daily Spotify streams.`;
       }
 
+      case 'get_artist_top_songs': {
+        const top = data?.data?.[0];
+        if (!top) return 'No song data found.';
+
+        return `${top.title} is the most streamed song by ${data.artistName} on Spotify with ${Number(top.totalStreams).toLocaleString()} streams.`;
+      }
+
       // get_artist needs OpenAI — fall through
       default:
         return null;
@@ -646,6 +682,19 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
           normalizedTerritory,
           params.limit ?? 20,
         );
+      }
+
+      case 'get_artist_top_songs': {
+        const [artist, songs] = await Promise.all([
+          this.artistService.getBySlug(params.slug),
+          this.artistService.getArtistSongs(params.slug, params.limit ?? 10),
+        ]);
+
+        return {
+          artistName: artist.name,
+          artistSlug: artist.slug,
+          data: songs,
+        };
       }
 
       default:
@@ -773,6 +822,22 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
             delta: e.delta,
           })),
           meta: data.meta,
+        };
+
+      case 'get_artist_top_songs':
+        return {
+          artistName: data.artistName,
+          artistSlug: data.artistSlug,
+          data: data.data?.map((s: any) => ({
+            rank: s.rank,
+            title: s.title,
+            songTitle: s.title,
+            songSlug: s.slug ?? s.songSlug ?? null,
+            artistName: s.artistName ?? data.artistName,
+            totalStreams: s.totalStreams,
+            dailyStreams: s.dailyStreams,
+            songImageUrl: s.imageUrl ?? s.songImageUrl ?? null,
+          })),
         };
 
       default:

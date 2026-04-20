@@ -203,6 +203,27 @@ export const ASK_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_artist_top_songs',
+      description: 'Get the top songs for a specific artist by Spotify streams',
+      parameters: {
+        type: 'object',
+        properties: {
+          slug: {
+            type: 'string',
+            description: 'Artist slug',
+          },
+          limit: {
+            type: 'number',
+            description: 'Number of songs to return',
+          },
+        },
+        required: ['slug'],
+      },
+    },
+  },
 ];
 
 export const TOOL_ENDPOINT_MAP: Record<string, string> = {
@@ -214,4 +235,6 @@ export const TOOL_ENDPOINT_MAP: Record<string, string> = {
   get_trending_artists: '/api/public/trending/artists',
   get_trending_songs: '/api/public/trending/songs',
   get_chart: '/api/public/charts/:chartName/:territory',
+  get_afrobeats_uk_summary: '/api/public/charts/afrobeats-uk-summary',
+  get_artist_top_songs: '/api/public/artists/:slug/top-songs',
 };

@@ -118,12 +118,23 @@ export class ArtistsService {
     );
   }
 
+  // async getArtistSongs(slug: string, limit = 20): Promise<ArtistSongEntry[]> {
+  //   console.log(`Fetching songs for artist "${slug}" with limit ${limit}`);
+  //   return this.cacheService.cached(
+  //     `public:artists:songs:${slug}:${limit}`,
+  //     CacheService.TTL.MEDIUM,
+  //     () => this.artistsRepository.getArtistSongs(slug, limit),
+  //   );
+  // }
+
   async getArtistSongs(slug: string, limit = 20): Promise<ArtistSongEntry[]> {
-    return this.cacheService.cached(
-      `public:artists:songs:${slug}:${limit}`,
-      CacheService.TTL.MEDIUM,
-      () => this.artistsRepository.getArtistSongs(slug, limit),
-    );
+    console.log(`Fetching songs for artist "${slug}" with limit ${limit}`);
+
+    const res = await this.artistsRepository.getArtistSongs(slug, limit);
+
+    console.log(`Fetched ${res.length} songs for artist "${slug}"`);
+
+    return res;
   }
 
   async getArtistHistory(slug: string): Promise<ArtistHistoryPoint[]> {
