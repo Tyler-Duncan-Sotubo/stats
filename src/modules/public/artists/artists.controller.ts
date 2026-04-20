@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  DefaultValuePipe,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { ArtistsService } from './artists.service';
 
 @Controller('public/artists')
@@ -36,5 +43,13 @@ export class ArtistsController {
   @Get(':slug')
   getBySlug(@Param('slug') slug: string) {
     return this.artistsService.getBySlug(slug);
+  }
+
+  @Get('indexable')
+  async getIndexableArtists(
+    @Query('limit', new DefaultValuePipe(5000), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+  ) {
+    return this.artistsService.getIndexableArtists(limit, offset);
   }
 }

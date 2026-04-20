@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, isNotNull, isNull, sql, and, desc } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
-import { songs } from 'src/infrastructure/drizzle/schema';
 
 export interface PublicSong {
   id: string;
@@ -119,24 +118,22 @@ export class SongsRepository {
     return result.rows as PublicSongFeature[];
   }
 
-  async getIndexableSongs(): Promise<{ slug: string; updatedAt: string }[]> {
-    return this.db
-      .select({
-        slug: songs.slug,
-        updatedAt: sql<string>`${songs.createdAt}::text`,
-      })
-      .from(songs)
-      .where(
-        and(
-          isNotNull(songs.slug),
-          isNotNull(songs.spotifyTrackId),
-          isNull(songs.mergedIntoSongId),
-          eq(songs.entityStatus, 'canonical'),
-          eq(songs.needsReview, false),
-        ),
-      )
-      .orderBy(desc(songs.createdAt))
-      .limit(5000);
+  async getIndexableSongs(
+    limit: number,
+    offset: number,
+  ): Promise<{ slug: string; updatedAt: string }[]> {
+    const result = await this.db.execute(sql`
+    SELECT 
+      slug,
+      created_at AS "updatedAt"
+    FROM songs
+    WHERE entity_status = 'canonical'
+      AND slug IS NOT NULL
+      AND merged_into_song_id IS NULL
+    ORDER BY created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+    return result.rows as { slug: string; updatedAt: string }[];
   }
 
   async searchSong(title: string, artistName?: string) {

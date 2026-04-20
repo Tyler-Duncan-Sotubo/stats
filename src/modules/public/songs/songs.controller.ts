@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  DefaultValuePipe,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { SongsService } from './songs.service';
 
 @Controller('public/songs')
@@ -15,8 +22,11 @@ export class SongsController {
   }
 
   @Get('indexable')
-  async getIndexableSongs() {
-    return this.songsService.getIndexableSongs();
+  async getIndexableSongs(
+    @Query('limit', new DefaultValuePipe(10000), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+  ) {
+    return this.songsService.getIndexableSongs(limit, offset);
   }
 
   @Get('search')

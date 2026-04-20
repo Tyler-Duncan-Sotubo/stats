@@ -29,6 +29,17 @@ export class ArtistsService {
     private readonly cacheService: CacheService,
   ) {}
 
+  async getIndexableArtists(
+    limit: number,
+    offset: number,
+  ): Promise<{ slug: string; updatedAt: string }[]> {
+    return this.cacheService.cached(
+      `public:artists:indexable:${limit}:${offset}`,
+      CacheService.TTL.MEDIUM,
+      () => this.artistsRepository.getIndexableArtists(limit, offset),
+    );
+  }
+
   async getBySlug(slug: string): Promise<PublicArtist> {
     const cacheKey = `public:artists:${slug}`;
 

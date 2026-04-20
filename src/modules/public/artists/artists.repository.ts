@@ -363,4 +363,21 @@ export class ArtistsRepository {
       }
     );
   }
+
+  async getIndexableArtists(
+    limit: number,
+    offset: number,
+  ): Promise<{ slug: string; updatedAt: string }[]> {
+    const result = await this.db.execute(sql`
+    SELECT 
+      slug,
+      updated_at AS "updatedAt"
+    FROM artists
+    WHERE entity_status = 'canonical'
+      AND slug IS NOT NULL
+    ORDER BY updated_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+    return result.rows as { slug: string; updatedAt: string }[];
+  }
 }
