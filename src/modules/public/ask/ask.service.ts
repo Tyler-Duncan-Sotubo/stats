@@ -10,7 +10,7 @@ import { ChartsService } from '../charts/charts.service';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { AskRepository } from 'src/modules/public/ask/ask.repository';
 import { SongsService } from '../songs/songs.service';
-import { getDirectAnswer } from 'src/utils/ask-direct-answers';
+import { getDirectAnswer } from './utils/ask-direct-answers';
 
 export interface AskResult {
   answer: string;
@@ -276,27 +276,39 @@ export class AskService {
 
   private isComparisonQuestion(question: string): boolean {
     const lower = question.toLowerCase();
+
     return (
-      /\b(.+?)\s+vs\s+(.+?)\b/i.test(lower) ||
-      /\b(.+?)\s+versus\s+(.+?)\b/i.test(lower) ||
-      /\bcompare\s+(.+?)\s+and\s+(.+?)\b/i.test(lower) ||
-      /\bis\s+(.+?)\s+bigger\s+than\s+(.+?)\b/i.test(lower) ||
-      lower.includes('more than') ||
-      lower.includes('compared to')
+      /\b.+?\s+vs\.?\s+.+?\b/i.test(lower) ||
+      /\b.+?\s+versus\s+.+?\b/i.test(lower) ||
+      /\bcompare\s+.+?\s+and\s+.+?\b/i.test(lower) ||
+      /\bis\s+.+?\s+bigger\s+than\s+.+?\b/i.test(lower) ||
+      /\bwho has more (streams|monthly listeners|listeners)\b/i.test(lower) ||
+      /\bwho is (bigger|more popular)\b/i.test(lower) ||
+      /\bcompared to\b/i.test(lower) ||
+      // "wizkid or davido" — only treat as comparison when sandwiched between two non-trivial words
+      /\b\w{3,}\s+or\s+\w{3,}\b/i.test(lower)
     );
   }
-
   private async handleComparison(question: string): Promise<AskResult> {
     const slugResponse = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 100,
+      model: 'gpt-4o-mini', // FIX: was gpt-5.4-mini
+      max_tokens: 100, // FIX: was max_completion_tokens
       messages: [
         {
           role: 'system',
           content: `Extract the two artist slugs from the question.
 Return ONLY a JSON object like: {"artist1": "wizkid", "artist2": "burna-boy"}
 Rules: lowercase, spaces become hyphens, remove special characters.
-Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "asap-rocky"`,
+Examples:
+"Burna Boy" → "burna-boy"
+"Wizkid" → "wizkid"
+"ASAP Rocky" → "asap-rocky"
+Phrasings to handle:
+"wizkid vs burna boy" → artist1=wizkid, artist2=burna-boy
+"wizkid or davido" → artist1=wizkid, artist2=davido
+"is wizkid bigger than davido" → artist1=wizkid, artist2=davido
+"compare wizkid and davido" → artist1=wizkid, artist2=davido
+"who has more streams wizkid or davido" → artist1=wizkid, artist2=davido`,
         },
         { role: 'user', content: question },
       ],
@@ -324,8 +336,6 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
       return this.askSingle(question);
     }
 
-    this.logger.log(`Comparison detected: ${artist1} vs ${artist2}`);
-
     const [data1, data2] = await Promise.all([
       this.artistService.getBySlug(artist1).catch(() => null),
       this.artistService.getBySlug(artist2).catch(() => null),
@@ -338,13 +348,48 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
       return this.askSingle(question);
     }
 
+    const monthly1 = Number(data1.monthlyListeners ?? 0);
+    const monthly2 = Number(data2.monthlyListeners ?? 0);
+    const streams1 = Number(data1.totalStreams ?? 0);
+    const streams2 = Number(data2.totalStreams ?? 0);
+
+    if (/monthly listeners|popular|rank/i.test(question)) {
+      const winner = monthly1 >= monthly2 ? data1 : data2;
+      const loser = winner === data1 ? data2 : data1;
+      const winnerVal = monthly1 >= monthly2 ? monthly1 : monthly2;
+      const loserVal = monthly1 >= monthly2 ? monthly2 : monthly1;
+
+      return {
+        answer: `${winner.name} has more monthly listeners on Spotify with ${winnerVal.toLocaleString()}, compared to ${loser.name}'s ${loserVal.toLocaleString()}.`,
+        toolUsed: 'get_artist:comparison',
+        data: { artist1: data1, artist2: data2 },
+        slug: winner.slug ?? null,
+      };
+    }
+
+    if (/streams|bigger/i.test(question)) {
+      const winner = streams1 >= streams2 ? data1 : data2;
+      const loser = winner === data1 ? data2 : data1;
+      const winnerVal = streams1 >= streams2 ? streams1 : streams2;
+      const loserVal = streams1 >= streams2 ? streams2 : streams1;
+
+      return {
+        answer: `${winner.name} has more Spotify streams with ${winnerVal.toLocaleString()}, compared to ${loser.name}'s ${loserVal.toLocaleString()}.`,
+        toolUsed: 'get_artist:comparison',
+        data: { artist1: data1, artist2: data2 },
+        slug: winner.slug ?? null,
+      };
+    }
+
+    // Default for "wizkid or davido" with no specific metric — compare both stats
     return {
-      answer: `Comparing ${data1.name} and ${data2.name} on TooXclusive Stats.`,
+      answer: `${data1.name} has ${monthly1.toLocaleString()} monthly listeners and ${streams1.toLocaleString()} total Spotify streams, compared to ${data2.name}'s ${monthly2.toLocaleString()} monthly listeners and ${streams2.toLocaleString()} streams.`,
       toolUsed: 'get_artist:comparison',
       data: { artist1: data1, artist2: data2 },
-      slug: data1.slug ?? null,
+      slug: null,
     };
   }
+  // In ask.utils.ts
 
   private async askSingle(question: string): Promise<AskResult> {
     const lower = question.toLowerCase();
@@ -353,8 +398,8 @@ Examples: "Burna Boy" → "burna-boy", "Wizkid" → "wizkid", "ASAP Rocky" → "
     const forceAfrobeats = this.isAfricaQuestion(lower);
 
     const toolResponse = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 150,
+      model: 'gpt-5.4-mini',
+      max_completion_tokens: 100,
       messages: [
         { role: 'system', content: TOOL_SYSTEM_PROMPT },
         {
