@@ -35,6 +35,20 @@ export interface PublicArtist {
   awards: PublicArtistAward[];
   // top songs
   topSongs: PublicArtistSong[];
+  // audiomack stats
+  audiomackStats: {
+    audiomackSlug: string | null;
+    snapshotDate: string | null;
+    totalPlays: number | null;
+    monthlyPlays: number | null;
+    followers: number | null;
+  } | null;
+  awardsSummary: {
+    totalWins: number;
+    totalNominations: number;
+    grammyWins: number;
+    grammyNominations: number;
+  };
 }
 
 export interface PublicArtistCertification {
@@ -498,5 +512,22 @@ export class ArtistsRepository {
       data: result.rows as MilestoneArtistEntry[],
       total: (countResult.rows[0] as any).total,
     };
+  }
+
+  async getAudiomackStats(artistId: string) {
+    const result = await this.db.execute(sql`
+    SELECT DISTINCT ON (artist_id)
+      audiomack_slug  AS "audiomackSlug",
+      snapshot_date   AS "snapshotDate",
+      total_plays     AS "totalPlays",
+      monthly_plays   AS "monthlyPlays",
+      followers
+    FROM artist_audiomack_snapshots
+    WHERE artist_id = ${artistId}
+    ORDER BY artist_id, snapshot_date DESC
+    LIMIT 1
+  `);
+
+    return result.rows[0] ?? null;
   }
 }

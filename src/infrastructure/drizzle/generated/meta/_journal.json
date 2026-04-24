@@ -15,6 +15,13 @@
       "when": 1776513911909,
       "tag": "0001_smooth_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777052147720,
+      "tag": "0002_tiny_frog_thor",
+      "breakpoints": true
     }
   ]
 }

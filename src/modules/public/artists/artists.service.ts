@@ -63,6 +63,7 @@ export class ArtistsService {
           awards,
           topSongs,
           awardsSummary,
+          audiomackStats,
         ] = await Promise.all([
           this.artistsRepository.getCertifications(artist.id),
           this.artistsRepository.getCharts(artist.id),
@@ -70,6 +71,7 @@ export class ArtistsService {
           this.artistsRepository.getAwards(artist.id),
           this.artistsRepository.getTopSongs(artist.id),
           this.artistsRepository.getAwardsSummary(artist.id),
+          this.artistsRepository.getAudiomackStats(artist.id),
         ]);
 
         return {
@@ -80,6 +82,7 @@ export class ArtistsService {
           awards,
           topSongs,
           awardsSummary,
+          audiomackStats,
         };
       },
     );

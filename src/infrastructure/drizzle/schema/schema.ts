@@ -14,6 +14,10 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { defaultId } from '../default-id';
+import {
+  artistAudiomackSnapshots,
+  songAudiomackSnapshots,
+} from './audiomack.schema';
 
 /* ============================================================================
    ARTISTS
@@ -656,6 +660,7 @@ export const artistsRelations = relations(artists, ({ one, many }) => ({
   chartEntries: many(chartEntries),
   awardRecords: many(awardRecords),
   records: many(records),
+  audiomackSnapshots: many(artistAudiomackSnapshots),
 }));
 
 export const artistAliasesRelations = relations(artistAliases, ({ one }) => ({
@@ -696,6 +701,7 @@ export const songsRelations = relations(songs, ({ one, many }) => ({
   certifications: many(certifications),
   chartEntries: many(chartEntries),
   records: many(records),
+  audiomackSnapshots: many(songAudiomackSnapshots),
 }));
 
 export const songAliasesRelations = relations(songAliases, ({ one }) => ({
