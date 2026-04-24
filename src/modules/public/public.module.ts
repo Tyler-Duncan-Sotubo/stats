@@ -27,6 +27,9 @@ import { AskRepository } from './ask/ask.repository';
 
 import { MilestonesController } from './milestone/milestones.controller';
 import { MilestonesService } from './milestone/milestones.service';
+import { AskResolver } from './ask/ask-resolver';
+import { AskFormatter } from './ask/ask-formatter';
+import { AskDataService } from './ask/ask-data.service';
 
 @Module({
   imports: [CacheModule],
@@ -51,6 +54,9 @@ import { MilestonesService } from './milestone/milestones.service';
     LeaderboardService,
     LeaderboardRepository,
     AskService,
+    AskResolver,
+    AskFormatter,
+    AskDataService,
     AskRepository,
     MilestonesService,
   ],

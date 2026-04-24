@@ -1,13 +1,5 @@
 const BASE_URL = process.env.SEED_URL ?? 'http://localhost:8000';
-const SKIP_IF_UPDATED_WITHIN_HOURS = parseInt(process.env.SKIP_HOURS ?? '6');
 const RATE_LIMIT_MS = parseInt(process.env.RATE_LIMIT_MS ?? '1500');
-
-function isStale(updatedAt: string | null): boolean {
-  if (!updatedAt) return true;
-  const hoursSinceUpdate =
-    (Date.now() - new Date(updatedAt).getTime()) / 1000 / 60 / 60;
-  return hoursSinceUpdate > SKIP_IF_UPDATED_WITHIN_HOURS;
-}
 
 async function fetchQuestions(): Promise<
   { slug: string; question: string; updatedAt: string | null }[]
@@ -42,19 +34,15 @@ async function reask(question: string): Promise<void> {
 
 async function seed(): Promise<void> {
   const all = await fetchQuestions();
-  const stale = all.filter((q) => isStale(q.updatedAt));
-  const skipped = all.length - stale.length;
 
-  console.log(
-    `🌱 ${all.length} total — ${skipped} fresh, refreshing ${stale.length}\n`,
-  );
+  console.log(`🌱 Refreshing all ${all.length} questions with new engine\n`);
 
-  for (const { question } of stale) {
+  for (const { question } of all) {
     await reask(question);
     await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
   }
 
-  console.log(`\n✅ Done — ${stale.length} refreshed, ${skipped} skipped`);
+  console.log(`\n✅ Done — ${all.length} refreshed`);
 }
 
 void seed();
