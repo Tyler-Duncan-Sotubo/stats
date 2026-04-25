@@ -459,15 +459,19 @@ export class ArtistsRepository {
   async getArtistHistory(slug: string): Promise<ArtistHistoryPoint[]> {
     const result = await this.db.execute(sql`
     SELECT
-      ags.snapshot_date   AS "date",
-      ags.total_streams   AS "totalStreams",
-      ags.daily_streams   AS "dailyStreams",
-      ags.daily_growth    AS "dailyGrowth",
-      ags.growth_7d       AS "growth7d"
-    FROM artist_growth_summary ags
-    JOIN artists a ON a.id = ags.artist_id
+      ass.snapshot_date                                             AS "date",
+      ass.total_streams                                             AS "totalStreams",
+      ass.daily_streams                                             AS "dailyStreams",
+      (ass.daily_streams - LAG(ass.daily_streams) OVER (
+        PARTITION BY ass.artist_id ORDER BY ass.snapshot_date
+      ))                                                            AS "dailyGrowth",
+      (ass.total_streams - LAG(ass.total_streams, 7) OVER (
+        PARTITION BY ass.artist_id ORDER BY ass.snapshot_date
+      ))                                                            AS "growth7d"
+    FROM artist_stats_snapshots ass
+    JOIN artists a ON a.id = ass.artist_id
     WHERE a.slug = ${slug}
-    ORDER BY ags.snapshot_date ASC
+    ORDER BY ass.snapshot_date ASC
     LIMIT 90
   `);
     return result.rows as ArtistHistoryPoint[];

@@ -198,16 +198,20 @@ export class SongsRepository {
   async getSongHistory(slug: string): Promise<SongHistoryPoint[]> {
     const result = await this.db.execute(sql`
     SELECT
-      sgs.snapshot_date   AS "date",
-      sgs.total_streams   AS "totalStreams",
-      sgs.daily_streams   AS "dailyStreams",
-      sgs.daily_growth    AS "dailyGrowth",
-      sgs.growth_7d       AS "growth7d"
-    FROM song_growth_summary sgs
-    JOIN songs s ON s.id = sgs.song_id
+      sss.snapshot_date                                           AS "date",
+      sss.spotify_streams                                         AS "totalStreams",
+      sss.daily_streams                                           AS "dailyStreams",
+      (sss.daily_streams - LAG(sss.daily_streams) OVER (
+        PARTITION BY sss.song_id ORDER BY sss.snapshot_date
+      ))                                                          AS "dailyGrowth",
+      (sss.spotify_streams - LAG(sss.spotify_streams, 7) OVER (
+        PARTITION BY sss.song_id ORDER BY sss.snapshot_date
+      ))                                                          AS "growth7d"
+    FROM song_stats_snapshots sss
+    JOIN songs s ON s.id = sss.song_id
     WHERE s.slug = ${slug}
       AND s.entity_status = 'canonical'
-    ORDER BY sgs.snapshot_date ASC
+    ORDER BY sss.snapshot_date ASC
     LIMIT 90
   `);
     return result.rows as SongHistoryPoint[];
