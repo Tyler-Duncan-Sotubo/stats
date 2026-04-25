@@ -41,10 +41,10 @@ const DOWNLOAD_PHRASES = [
 ];
 
 const UNANSWERABLE_RESPONSE =
-  "That's a great question but TooXclusive Stats doesn't have that data yet. We track artist and song stats across charts and Spotify data.";
+  "That's a great question but we don't have that data yet. We track artist and song stats across charts and Spotify data.";
 
 const DOWNLOAD_RESPONSE =
-  "TooXclusive Stats is a music statistics platform — we don't provide downloads. Visit your preferred streaming platform to listen.";
+  "We are a music stats engine — we don't provide downloads. Visit your preferred streaming platform to listen.";
 
 @Injectable()
 export class AskService {
