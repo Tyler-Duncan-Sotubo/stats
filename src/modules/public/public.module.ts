@@ -30,6 +30,7 @@ import { MilestonesService } from './milestone/milestones.service';
 import { AskResolver } from './ask/ask-resolver';
 import { AskFormatter } from './ask/ask-formatter';
 import { AskDataService } from './ask/ask-data.service';
+import { RankingsController } from './ranking/rankings.controller';
 
 @Module({
   imports: [CacheModule],
@@ -41,6 +42,7 @@ import { AskDataService } from './ask/ask-data.service';
     LeaderboardController,
     AskController,
     MilestonesController,
+    RankingsController,
   ],
   providers: [
     TrendingService,

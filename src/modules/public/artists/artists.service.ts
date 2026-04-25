@@ -121,15 +121,6 @@ export class ArtistsService {
     );
   }
 
-  // async getArtistSongs(slug: string, limit = 20): Promise<ArtistSongEntry[]> {
-  //   console.log(`Fetching songs for artist "${slug}" with limit ${limit}`);
-  //   return this.cacheService.cached(
-  //     `public:artists:songs:${slug}:${limit}`,
-  //     CacheService.TTL.MEDIUM,
-  //     () => this.artistsRepository.getArtistSongs(slug, limit),
-  //   );
-  // }
-
   async getArtistSongs(slug: string, limit = 20): Promise<ArtistSongEntry[]> {
     console.log(`Fetching songs for artist "${slug}" with limit ${limit}`);
 
@@ -145,6 +136,44 @@ export class ArtistsService {
       `public:artists:history:${slug}`,
       CacheService.TTL.MEDIUM,
       () => this.artistsRepository.getArtistHistory(slug),
+    );
+  }
+
+  async getArtistSongRanking(params: {
+    artistSlug: string;
+    limit: number;
+    metric: string;
+  }) {
+    const { artistSlug, limit, metric } = params;
+    const cacheKey = `public:rankings:songs:${artistSlug}:${limit}:${metric}`;
+
+    return this.cacheService.cached(
+      cacheKey,
+      CacheService.TTL.LONG,
+      async () => {
+        const artist = await this.artistsRepository.findBySlug(artistSlug);
+        if (!artist)
+          throw new NotFoundException(`Artist "${artistSlug}" not found`);
+
+        const songs = await this.artistsRepository.getTopSongs(
+          artist.id,
+          limit,
+        );
+
+        return {
+          data: songs,
+          meta: {
+            artistSlug,
+            artistName: artist.name,
+            artistImage: artist.imageUrl,
+            limit,
+            metric,
+            total: songs.length,
+            slug: `top-${limit}-${artistSlug}-songs-by-${metric}`,
+            generatedAt: new Date().toISOString(),
+          },
+        };
+      },
     );
   }
 }
