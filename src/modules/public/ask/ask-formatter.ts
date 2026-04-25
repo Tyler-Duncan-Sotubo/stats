@@ -9,19 +9,23 @@ export class AskFormatter {
     const { category, data, meta } = resolved;
     const n = question.toLowerCase();
 
+    const fuzzyPrefix = meta.fuzzyMatch
+      ? `We couldn't find results for "${meta.fuzzyInput}" — showing results for ${meta.fuzzyMatch} instead. `
+      : '';
+
     switch (category) {
       // ── Artist streams ────────────────────────────────────────────────────
       case 'artist_streams': {
         if (!data?.totalStreams)
           return `We don't have stream data for that artist yet.`;
-        return `${data.name} has ${this.num(data.totalStreams)} total Spotify streams.`;
+        return `${fuzzyPrefix}${data.name} has ${this.num(data.totalStreams)} total Spotify streams.`;
       }
 
       // ── Artist monthly listeners ──────────────────────────────────────────
       case 'artist_monthly_listeners': {
         if (!data?.monthlyListeners)
           return `We don't have listener data for that artist yet.`;
-        return `${data.name} has ${this.num(data.monthlyListeners)} monthly listeners on Spotify.`;
+        return `${fuzzyPrefix}${data.name} has ${this.num(data.monthlyListeners)} monthly listeners on Spotify.`;
       }
 
       // ── Artist daily streams ──────────────────────────────────────────────
@@ -168,7 +172,7 @@ export class AskFormatter {
         if (!parts.length)
           return `${data.name} is in our database but we don't have stats yet.`;
 
-        return `${data.name} has ${parts.join(', ')}.`;
+        return `${fuzzyPrefix}${data.name} has ${parts.join(', ')}.`;
       }
 
       // ── Artist top songs ──────────────────────────────────────────────────

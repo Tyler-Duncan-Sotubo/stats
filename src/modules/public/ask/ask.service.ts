@@ -1,13 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-// ask.service.ts
-
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
 import { AskRepository } from 'src/modules/public/ask/ask.repository';
-import { classifyQuestion, normalize } from './ask-classifier';
-import { extractEntities } from './ask-entity-extractor';
+import { AskLLMClassifier } from './ask-llm-classifier';
 import { AskResolver } from './ask-resolver';
 import { AskFormatter } from './ask-formatter';
 import { getDirectAnswer } from './utils/ask-direct-answers';
@@ -41,6 +38,8 @@ const UNANSWERABLE_RESPONSE =
 export class AskService {
   private readonly logger = new Logger(AskService.name);
   private readonly openai: OpenAI;
+  private readonly llmClassifier: AskLLMClassifier;
+  private readonly inFlight = new Map<string, Promise<AskResult>>();
 
   constructor(
     private readonly config: ConfigService,
@@ -52,6 +51,7 @@ export class AskService {
     this.openai = new OpenAI({
       apiKey: this.config.get<string>('OPENAI_API_KEY'),
     });
+    this.llmClassifier = new AskLLMClassifier(this.openai);
   }
 
   async getIndexable(): Promise<{ slug: string; updatedAt: Date | null }[]> {
@@ -78,81 +78,138 @@ export class AskService {
       };
     }
 
-    // ── Layer 1: hardcoded direct answers ───────────────────────────────────
+    // ── Layer 1: direct answers ─────────────────────────────────────────────
     const direct = getDirectAnswer(question);
     if (direct) {
       return { answer: direct, toolUsed: null, data: null, slug: null };
     }
 
-    const cacheKey = `ask:v2:${normalize(question)}`;
+    const n = question.toLowerCase().trim();
+    const cacheKey = `ask:v3:${n}`;
 
-    const cached = await this.cacheService.cached<AskResult>(
-      cacheKey,
-      CacheService.TTL.MEDIUM,
-      async () => {
-        const n = normalize(question);
+    // ── Layer 2: cache hit ──────────────────────────────────────────────────
+    const cached = await this.cacheService.get<AskResult>(cacheKey);
+    if (cached) return cached;
 
-        // ── Layer 2: unanswerable ───────────────────────────────────────────
-        if (UNANSWERABLE_PHRASES.some((p) => n.includes(p))) {
-          return {
-            answer: UNANSWERABLE_RESPONSE,
-            toolUsed: null,
-            data: null,
-            slug: null,
-          };
-        }
+    // ── Layer 3: in-flight deduplication ────────────────────────────────────
+    if (this.inFlight.has(cacheKey)) {
+      return this.inFlight.get(cacheKey)!;
+    }
 
-        // ── Layer 3: classify ───────────────────────────────────────────────
-        const classified = classifyQuestion(question);
-        this.logger.log(
-          `[Ask] category=${classified.category} question="${question}"`,
-        );
+    const promise = this.resolveAndCache(question, n, cacheKey);
+    this.inFlight.set(cacheKey, promise);
 
-        // ── Layer 4: resolve + format (no LLM) ─────────────────────────────
-        if (classified.category !== 'unclassified') {
-          const entities = extractEntities(question, classified.category);
-          this.logger.log(`[Ask] entities=${JSON.stringify(entities)}`);
-
-          const resolved = await this.askResolver.resolve(
-            classified.category,
-            entities,
-            classified.normalized,
-          );
-
-          if (resolved) {
-            const answer = this.askFormatter.format(resolved, question);
-
-            if (answer) {
-              const slug = this.extractSlug(resolved);
-              await this.saveQuestion(question, {
-                answer,
-                toolUsed: classified.category,
-                data: resolved.data,
-                slug,
-              });
-              return {
-                answer,
-                toolUsed: classified.category,
-                data: resolved.data,
-                slug,
-              };
-            }
-          }
-        }
-
-        // ── Layer 5: LLM fallback ───────────────────────────────────────────
-        this.logger.warn(
-          `[Ask] Falling back to LLM — category=${classified.category} question="${question}"`,
-        );
-        return this.llmFallback(question);
-      },
-    );
-
-    return cached;
+    try {
+      return await promise;
+    } finally {
+      this.inFlight.delete(cacheKey);
+    }
   }
 
-  // ── LLM fallback ─────────────────────────────────────────────────────────────
-  // Only reached for truly unclassified questions
+  // ── Pipeline ──────────────────────────────────────────────────────────────
+
+  private async resolveAndCache(
+    question: string,
+    n: string,
+    cacheKey: string,
+  ): Promise<AskResult> {
+    const result = await this.runAskPipeline(question, n);
+    await this.cacheService.set(cacheKey, result, CacheService.TTL.MEDIUM);
+    return result;
+  }
+
+  private async runAskPipeline(
+    question: string,
+    n: string,
+  ): Promise<AskResult> {
+    if (UNANSWERABLE_PHRASES.some((p) => n.includes(p))) {
+      return {
+        answer: UNANSWERABLE_RESPONSE,
+        toolUsed: null,
+        data: null,
+        slug: null,
+      };
+    }
+
+    const classified = await this.llmClassifier.classify(question);
+
+    this.logger.log(
+      `[Ask] category=${classified.category} artistSlug=${classified.artistSlug} question="${question}"`,
+    );
+
+    if (classified.category !== 'unclassified') {
+      const entities = {
+        artistSlug: classified.artistSlug,
+        artistSlug2: classified.artistSlug2,
+        songTitle: classified.songTitle,
+        chartName: classified.chartName,
+        chartTerritory: classified.chartTerritory,
+        country: classified.country,
+        isAfrobeats: classified.isAfrobeats,
+        limit: classified.limit,
+        milestone: classified.milestone,
+      };
+
+      let resolved = await this.askResolver.resolve(
+        classified.category,
+        entities,
+        classified.normalized,
+      );
+
+      // ── Song → artist retry ─────────────────────────────────────────────────
+      // If a song_streams or song_who_sang query resolved to null, the full
+      // question text might actually be an artist name (e.g. "baby boy av streams").
+      // Retry as artist_profile using the raw question words as slug.
+      if (
+        !resolved &&
+        (classified.category === 'song_streams' ||
+          classified.category === 'song_who_sang')
+      ) {
+        const fallbackSlug = n
+          .replace(
+            /\b(streams?|how many|does|have|has|who sang|who made)\b/g,
+            '',
+          )
+          .trim()
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
+
+        this.logger.log(
+          `[Ask] song null — retrying as artist_profile slug=${fallbackSlug}`,
+        );
+
+        resolved = await this.askResolver.resolve(
+          'artist_profile',
+          { ...entities, artistSlug: fallbackSlug },
+          classified.normalized,
+        );
+      }
+
+      if (resolved) {
+        const answer = this.askFormatter.format(resolved, question);
+
+        if (answer) {
+          const slug = this.extractSlug(resolved);
+          const result: AskResult = {
+            answer,
+            toolUsed: classified.category,
+            data: resolved.data,
+            slug,
+          };
+          await this.saveQuestion(question, result);
+          return result;
+        }
+      }
+    }
+
+    this.logger.warn(
+      `[Ask] Resolver null — category=${classified.category} question="${question}"`,
+    );
+    return this.llmFallback(question);
+  }
+
+  // ── LLM answer fallback ───────────────────────────────────────────────────
 
   private async llmFallback(question: string): Promise<AskResult> {
     try {
@@ -178,7 +235,6 @@ export class AskService {
         data: null,
         slug: null,
       }).catch(() => {});
-
       return { answer, toolUsed: null, data: null, slug: null };
     } catch (err) {
       this.logger.error(`[Ask] LLM fallback failed: ${(err as Error).message}`);
@@ -191,7 +247,7 @@ export class AskService {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async saveQuestion(
     question: string,
@@ -220,7 +276,6 @@ export class AskService {
 
   private extractSlug(resolved: any): string | null {
     const { category, data, meta } = resolved;
-
     if (meta?.artistSlug) return meta.artistSlug;
     if (category === 'comparison') return meta?.artistSlug ?? null;
     if (category === 'song_streams' || category === 'song_who_sang') {

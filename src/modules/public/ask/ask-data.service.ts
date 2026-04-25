@@ -95,6 +95,61 @@ export class AskDataService {
     }
   }
 
+  async findArtistFuzzy(name: string) {
+    const sanitised = name.replace(/-/g, ' ').trim();
+
+    // 1. Trigram similarity
+    const fuzzy = await this.db.execute(sql`
+    SELECT
+      a.id,
+      a.name,
+      a.slug,
+      a.image_url           AS "imageUrl",
+      a.origin_country      AS "originCountry",
+      a.is_afrobeats        AS "isAfrobeats",
+      ass.total_streams     AS "totalStreams",
+      ass.daily_streams     AS "dailyStreams",
+      ass.track_count       AS "trackCount",
+      aml.monthly_listeners AS "monthlyListeners",
+      aml.global_rank       AS "globalRank",
+      aml.daily_change      AS "listenersDailyChange",
+      similarity(LOWER(a.name), LOWER(${sanitised})) AS score
+    FROM artists a
+    LEFT JOIN artist_stream_summary ass ON ass.artist_id = a.id
+    LEFT JOIN artist_monthly_listener_summary aml ON aml.artist_id = a.id
+    WHERE similarity(LOWER(a.name), LOWER(${sanitised})) > 0.3
+    ORDER BY score DESC
+    LIMIT 1
+  `);
+
+    if (fuzzy.rows[0]) return fuzzy.rows[0];
+
+    // 2. LIKE fallback for short names / prefixes
+    const like = await this.db.execute(sql`
+    SELECT
+      a.id,
+      a.name,
+      a.slug,
+      a.image_url           AS "imageUrl",
+      a.origin_country      AS "originCountry",
+      a.is_afrobeats        AS "isAfrobeats",
+      ass.total_streams     AS "totalStreams",
+      ass.daily_streams     AS "dailyStreams",
+      ass.track_count       AS "trackCount",
+      aml.monthly_listeners AS "monthlyListeners",
+      aml.global_rank       AS "globalRank",
+      aml.daily_change      AS "listenersDailyChange"
+    FROM artists a
+    LEFT JOIN artist_stream_summary ass ON ass.artist_id = a.id
+    LEFT JOIN artist_monthly_listener_summary aml ON aml.artist_id = a.id
+    WHERE LOWER(a.name) LIKE ${'%' + sanitised.toLowerCase() + '%'}
+    ORDER BY ass.total_streams DESC NULLS LAST
+    LIMIT 1
+  `);
+
+    return like.rows[0] ?? null;
+  }
+
   // ── Song ──────────────────────────────────────────────────────────────────
 
   async getSong(title: string, artistName?: string) {

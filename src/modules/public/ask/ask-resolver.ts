@@ -19,6 +19,8 @@ export interface ResolvedData {
     limit?: number;
     milestone?: number | null;
     comparisonMetric?: 'streams' | 'listeners' | 'general';
+    fuzzyMatch?: string | null; // if the resolver had to do a fuzzy match, this is the name it matched to
+    fuzzyInput?: string | null; // the original input that was used for the fuzzy match
   };
 }
 
@@ -49,16 +51,40 @@ export class AskResolver {
         case 'artist_biggest_song':
         case 'artist_global_rank': {
           if (!entities.artistSlug) return null;
-          const artist = await this.askDataService.getArtist(
-            entities.artistSlug,
-          );
+
+          let artist = await this.askDataService.getArtist(entities.artistSlug);
+
+          if (!artist) {
+            this.logger.log(
+              `[AskResolver] exact miss slug=${entities.artistSlug} — trying fuzzy`,
+            );
+            artist = (await this.askDataService.findArtistFuzzy(
+              entities.artistSlug,
+            )) as any;
+
+            if (artist) {
+              this.logger.log(
+                `[AskResolver] fuzzy hit slug=${entities.artistSlug} → resolved=${artist.slug}`,
+              );
+            }
+          }
+
           if (!artist) return null;
+
+          const resolvedSlug = artist.slug ?? entities.artistSlug;
+          const isFuzzyMatch = resolvedSlug !== entities.artistSlug;
+          const fuzzyInput = isFuzzyMatch
+            ? entities.artistSlug?.replace(/-/g, ' ')
+            : null;
+
           return {
             category,
             data: artist,
             meta: {
-              artistSlug: entities.artistSlug,
+              artistSlug: artist.slug ?? entities.artistSlug,
               milestone: entities.milestone,
+              fuzzyMatch: isFuzzyMatch ? artist.name : null,
+              fuzzyInput,
             },
           };
         }
