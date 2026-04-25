@@ -31,8 +31,20 @@ const UNANSWERABLE_PHRASES = [
   'most awarded afrobeats artist',
 ];
 
+const DOWNLOAD_PHRASES = [
+  'download',
+  'mp3',
+  'mp4',
+  'free download',
+  'audio download',
+  'indir',
+];
+
 const UNANSWERABLE_RESPONSE =
   "That's a great question but TooXclusive Stats doesn't have that data yet. We track artist and song stats across charts and Spotify data.";
+
+const DOWNLOAD_RESPONSE =
+  "TooXclusive Stats is a music statistics platform — we don't provide downloads. Visit your preferred streaming platform to listen.";
 
 @Injectable()
 export class AskService {
@@ -125,6 +137,15 @@ export class AskService {
     if (UNANSWERABLE_PHRASES.some((p) => n.includes(p))) {
       return {
         answer: UNANSWERABLE_RESPONSE,
+        toolUsed: null,
+        data: null,
+        slug: null,
+      };
+    }
+
+    if (DOWNLOAD_PHRASES.some((p) => n.includes(p))) {
+      return {
+        answer: DOWNLOAD_RESPONSE,
         toolUsed: null,
         data: null,
         slug: null,
