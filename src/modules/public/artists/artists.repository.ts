@@ -49,6 +49,7 @@ export interface PublicArtist {
     grammyWins: number;
     grammyNominations: number;
   };
+  rankContext: any;
 }
 
 export interface PublicArtistCertification {

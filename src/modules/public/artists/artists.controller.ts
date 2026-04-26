@@ -53,7 +53,7 @@ export class ArtistsController {
    * Full artist profile
    */
   @Get(':slug')
-  getBySlug(@Param('slug') slug: string) {
+  async getBySlug(@Param('slug') slug: string) {
     return this.artistsService.getBySlug(slug);
   }
 }

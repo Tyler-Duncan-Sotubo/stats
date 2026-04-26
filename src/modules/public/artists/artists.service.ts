@@ -7,6 +7,7 @@ import type {
   ArtistSongEntry,
   ArtistHistoryPoint,
 } from './artists.repository';
+import { LeaderboardRepository } from '../leaderboard/leaderboard.repository';
 
 export interface BrowseArtistsParams {
   limit?: number;
@@ -32,6 +33,7 @@ export class ArtistsService {
   constructor(
     private readonly artistsRepository: ArtistsRepository,
     private readonly cacheService: CacheService,
+    private readonly leaderboardRepository: LeaderboardRepository,
   ) {}
 
   async getIndexableArtists(
@@ -46,46 +48,49 @@ export class ArtistsService {
   }
 
   async getBySlug(slug: string): Promise<PublicArtist> {
-    const cacheKey = `public:artists:${slug}`;
+    // const cacheKey = `public:artists:${slug}`;
 
-    return this.cacheService.cached(
-      cacheKey,
-      CacheService.TTL.MEDIUM,
-      async () => {
-        const artist = await this.artistsRepository.findBySlug(slug);
+    // return this.cacheService.cached(
+    //   cacheKey,
+    //   CacheService.TTL.MEDIUM,
+    //   async () => {
+    const artist = await this.artistsRepository.findBySlug(slug);
 
-        if (!artist) throw new NotFoundException(`Artist "${slug}" not found`);
+    if (!artist) throw new NotFoundException(`Artist "${slug}" not found`);
 
-        const [
-          certifications,
-          charts,
-          records,
-          awards,
-          topSongs,
-          awardsSummary,
-          audiomackStats,
-        ] = await Promise.all([
-          this.artistsRepository.getCertifications(artist.id),
-          this.artistsRepository.getCharts(artist.id),
-          this.artistsRepository.getRecords(artist.id),
-          this.artistsRepository.getAwards(artist.id),
-          this.artistsRepository.getTopSongs(artist.id),
-          this.artistsRepository.getAwardsSummary(artist.id),
-          this.artistsRepository.getAudiomackStats(artist.id),
-        ]);
+    const [
+      certifications,
+      charts,
+      records,
+      awards,
+      topSongs,
+      awardsSummary,
+      audiomackStats,
+      rankContext,
+    ] = await Promise.all([
+      this.artistsRepository.getCertifications(artist.id),
+      this.artistsRepository.getCharts(artist.id),
+      this.artistsRepository.getRecords(artist.id),
+      this.artistsRepository.getAwards(artist.id),
+      this.artistsRepository.getTopSongs(artist.id),
+      this.artistsRepository.getAwardsSummary(artist.id),
+      this.artistsRepository.getAudiomackStats(artist.id),
+      this.leaderboardRepository.getArtistRankContext(artist.id), // 👈 ADD THIS
+    ]);
 
-        return {
-          ...artist,
-          certifications,
-          charts,
-          records,
-          awards,
-          topSongs,
-          awardsSummary,
-          audiomackStats,
-        };
-      },
-    );
+    return {
+      ...artist,
+      certifications,
+      charts,
+      records,
+      awards,
+      topSongs,
+      awardsSummary,
+      audiomackStats,
+      rankContext,
+    };
+    //   },
+    // );
   }
 
   async browse(params: BrowseArtistsParams): Promise<BrowseArtistsResponse> {

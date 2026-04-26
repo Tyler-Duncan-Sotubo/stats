@@ -206,4 +206,70 @@ export class LeaderboardRepository {
       dailyStreams: row.dailyStreams ? Number(row.dailyStreams) : null,
     }));
   }
+
+  async getArtistRankContext(artistId: string): Promise<{
+    streamRank: number | null;
+    listenerRank: number | null;
+    dailyStreamsGain: number | null;
+    dailyListenersChange: number | null;
+    artistAbove: { name: string; slug: string } | null;
+    artistBelow: { name: string; slug: string } | null;
+  }> {
+    const result = await this.db.execute(sql`
+    WITH stream_ranked AS (
+      SELECT
+        a.id,
+        a.name,
+        a.slug,
+        ROW_NUMBER() OVER (ORDER BY s.total_streams DESC NULLS LAST)::int AS rank
+      FROM artist_stream_summary s
+      JOIN artists a ON a.id = s.artist_id
+      WHERE a.entity_status = 'canonical'
+    ),
+    target AS (
+      SELECT rank FROM stream_ranked WHERE id = ${artistId}
+    )
+    SELECT
+      sr.id,
+      sr.name,
+      sr.slug,
+      sr.rank,
+      CASE
+        WHEN sr.rank = (SELECT rank FROM target) THEN 'current'
+        WHEN sr.rank = (SELECT rank FROM target) - 1 THEN 'above'
+        WHEN sr.rank = (SELECT rank FROM target) + 1 THEN 'below'
+      END AS position
+    FROM stream_ranked sr
+    WHERE sr.rank BETWEEN (SELECT rank FROM target) - 1 
+                      AND (SELECT rank FROM target) + 1
+  `);
+
+    const rows = result.rows as any[];
+    const current = rows.find((r) => r.position === 'current');
+    const above = rows.find((r) => r.position === 'above');
+    const below = rows.find((r) => r.position === 'below');
+
+    // Get daily change from listener summary (you already store this)
+    const listenerResult = await this.db.execute(sql`
+    SELECT 
+      global_rank,
+      daily_change,
+      monthly_listeners
+    FROM artist_monthly_listener_summary
+    WHERE artist_id = ${artistId}
+  `);
+
+    const listenerRow = listenerResult.rows[0] as any;
+
+    return {
+      streamRank: current?.rank ?? null,
+      listenerRank: listenerRow?.global_rank ?? null,
+      dailyStreamsGain: null, // needs snapshot delta - see below
+      dailyListenersChange: listenerRow?.daily_change
+        ? Number(listenerRow.daily_change)
+        : null,
+      artistAbove: above ? { name: above.name, slug: above.slug } : null,
+      artistBelow: below ? { name: below.name, slug: below.slug } : null,
+    };
+  }
 }
