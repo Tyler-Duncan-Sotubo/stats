@@ -32,6 +32,10 @@ import { AskFormatter } from './ask/ask-formatter';
 import { AskDataService } from './ask/ask-data.service';
 import { RankingsController } from './ranking/rankings.controller';
 
+import { AlbumsService } from './albums/albums.service';
+import { AlbumsRepository } from './albums/albums.repository';
+import { AlbumsController } from './albums/albums.controller';
+
 @Module({
   imports: [CacheModule],
   controllers: [
@@ -43,6 +47,7 @@ import { RankingsController } from './ranking/rankings.controller';
     AskController,
     MilestonesController,
     RankingsController,
+    AlbumsController,
   ],
   providers: [
     TrendingService,
@@ -61,6 +66,8 @@ import { RankingsController } from './ranking/rankings.controller';
     AskDataService,
     AskRepository,
     MilestonesService,
+    AlbumsService,
+    AlbumsRepository,
   ],
 })
 export class PublicModule {}

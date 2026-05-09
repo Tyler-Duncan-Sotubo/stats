@@ -42,6 +42,39 @@ export interface MilestoneSongResponse {
   };
 }
 
+export const WEEKLY_REPORT_TYPES = [
+  'most-streamed-songs',
+  'biggest-movers-artists',
+  'new-chart-entries',
+] as const;
+export type WeeklyReportType = (typeof WEEKLY_REPORT_TYPES)[number];
+
+export interface WeeklyReportResponse {
+  data: WeeklyReportEntry[];
+  meta: {
+    weekStart: string;
+    weekEnd: string;
+    weekLabel: string; // "April 23 – April 29, 2025"
+    type: WeeklyReportType;
+    isAfrobeats: boolean;
+    total: number;
+  };
+}
+
+export interface WeeklyReportEntry {
+  rank: number;
+  songId?: string;
+  artistId?: string;
+  title?: string;
+  artistName: string;
+  artistSlug: string;
+  songSlug?: string;
+  imageUrl: string;
+  weekStreams: number;
+  totalStreams: number;
+  dailyAverage: number;
+}
+
 @Injectable()
 export class MilestonesService {
   constructor(
@@ -181,5 +214,70 @@ export class MilestonesService {
         };
       },
     );
+  }
+
+  // In MilestonesService
+
+  async getWeeklyReport(params: {
+    type: WeeklyReportType;
+    weekStart: string; // ISO date "2025-04-23"
+    isAfrobeats?: boolean;
+    page: number;
+    limit: number;
+  }): Promise<WeeklyReportResponse> {
+    const { type, weekStart, isAfrobeats, page, limit } = params;
+
+    const start = new Date(weekStart);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+
+    const weekEnd = end.toISOString().split('T')[0];
+    const weekLabel = this.formatWeekLabel(start, end);
+
+    const cacheKey = `public:weekly:${type}:${weekStart}:${isAfrobeats ? 'afrobeats' : 'global'}:${page}:${limit}`;
+
+    // Current week: short TTL (1hr). Past weeks: very long TTL (7 days)
+    const isCurrentWeek = this.isCurrentWeek(start);
+    const ttl = isCurrentWeek
+      ? CacheService.TTL.LONG
+      : CacheService.TTL.EXTENDED;
+
+    return this.cacheService.cached(cacheKey, ttl, async () => {
+      const offset = (page - 1) * limit;
+
+      const { data, total } = await this.songsRepository.getWeeklyMostStreamed({
+        weekStart,
+        weekEnd,
+        isAfrobeats,
+        limit,
+        offset,
+      });
+
+      return {
+        data: data.map((row, i) => ({ ...row, rank: offset + i + 1 })),
+        meta: {
+          weekStart,
+          weekEnd,
+          weekLabel,
+          type,
+          isAfrobeats: !!isAfrobeats,
+          total,
+        },
+      };
+    });
+  }
+
+  private formatWeekLabel(start: Date, end: Date): string {
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
+  }
+
+  private isCurrentWeek(start: Date): boolean {
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - now.getDay() + 1);
+    monday.setHours(0, 0, 0, 0);
+    return start >= monday;
   }
 }

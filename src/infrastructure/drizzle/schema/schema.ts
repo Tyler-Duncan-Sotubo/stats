@@ -224,6 +224,32 @@ export const albums = pgTable(
   ],
 );
 
+export const songAlbums = pgTable(
+  'song_albums',
+  {
+    id: uuid('id').primaryKey().$defaultFn(defaultId),
+
+    songId: uuid('song_id')
+      .notNull()
+      .references(() => songs.id, { onDelete: 'cascade' }),
+
+    albumId: uuid('album_id')
+      .notNull()
+      .references(() => albums.id, { onDelete: 'cascade' }),
+
+    trackNumber: integer('track_number'),
+    isPrimary: boolean('is_primary').notNull().default(false),
+
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('song_albums_song_album_idx').on(t.songId, t.albumId),
+    index('song_albums_album_idx').on(t.albumId),
+    index('song_albums_song_idx').on(t.songId),
+    index('song_albums_is_primary_idx').on(t.isPrimary),
+  ],
+);
+
 /* ============================================================================
    SONGS
 ============================================================================ */
@@ -685,6 +711,18 @@ export const albumsRelations = relations(albums, ({ one, many }) => ({
   songs: many(songs),
   certifications: many(certifications),
   chartEntries: many(chartEntries),
+  songAlbums: many(songAlbums),
+}));
+
+export const songAlbumsRelations = relations(songAlbums, ({ one }) => ({
+  song: one(songs, {
+    fields: [songAlbums.songId],
+    references: [songs.id],
+  }),
+  album: one(albums, {
+    fields: [songAlbums.albumId],
+    references: [albums.id],
+  }),
 }));
 
 export const songsRelations = relations(songs, ({ one, many }) => ({
@@ -702,6 +740,7 @@ export const songsRelations = relations(songs, ({ one, many }) => ({
   chartEntries: many(chartEntries),
   records: many(records),
   audiomackSnapshots: many(songAudiomackSnapshots),
+  songAlbums: many(songAlbums),
 }));
 
 export const songAliasesRelations = relations(songAliases, ({ one }) => ({

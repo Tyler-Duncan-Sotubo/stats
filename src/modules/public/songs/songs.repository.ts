@@ -3,6 +3,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
 import type { DrizzleDB } from 'src/infrastructure/drizzle/drizzle.module';
+import { WeeklyReportEntry } from '../milestone/milestones.service';
 
 export interface PublicSong {
   id: string;
@@ -260,6 +261,91 @@ export class SongsRepository {
     return {
       data: result.rows as MilestoneSongEntry[],
       total: (countResult.rows[0] as any).total,
+    };
+  }
+
+  async getWeeklyMostStreamed(params: {
+    weekStart: string;
+    weekEnd: string;
+    isAfrobeats?: boolean;
+    limit: number;
+    offset: number;
+  }): Promise<{ data: WeeklyReportEntry[]; total: number }> {
+    const { weekStart, weekEnd, isAfrobeats, limit, offset } = params;
+
+    const afrobeatsFilter = isAfrobeats
+      ? sql`AND (s.is_afrobeats = true OR a.is_afrobeats = true)`
+      : sql``;
+
+    // Songs that made their chart debut on ANY day within the report window.
+    // chart_week is actually a daily date — one row per song per chart per day.
+    // trend = 'NEW' means first-ever appearance on that chart.
+    const baseQuery = sql`
+    FROM (
+      SELECT DISTINCT ce.song_id
+      FROM chart_entries ce
+      JOIN chart_entry_snapshots ces ON ces.entry_id = ce.id
+      WHERE ce.chart_week  BETWEEN ${weekStart}::date AND ${weekEnd}::date
+        AND ces.trend       = 'NEW'
+    ) new_songs
+    JOIN songs   s ON s.id  = new_songs.song_id
+    JOIN artists a ON a.id  = s.artist_id
+
+    -- Stream delta: end of week vs start of week (or earliest available)
+    JOIN song_stats_snapshots s_end
+      ON  s_end.song_id       = s.id
+      AND s_end.snapshot_date = ${weekEnd}::date
+
+    JOIN LATERAL (
+      SELECT spotify_streams, snapshot_date
+      FROM song_stats_snapshots
+      WHERE song_id       = s.id
+        AND snapshot_date BETWEEN ${weekStart}::date AND ${weekEnd}::date
+      ORDER BY snapshot_date ASC
+      LIMIT 1
+    ) s_start ON true
+
+    WHERE s.entity_status       = 'canonical'
+      AND s.merged_into_song_id IS NULL
+      AND s_end.spotify_streams > s_start.spotify_streams
+      ${afrobeatsFilter}
+  `;
+
+    const [result, countResult] = await Promise.all([
+      this.db.execute(sql`
+      SELECT
+        s.id                                                        AS "songId",
+        s.title,
+        s.slug                                                      AS "songSlug",
+        s.image_url                                                 AS "imageUrl",
+        s.release_date                                              AS "releaseDate",
+        a.id                                                        AS "artistId",
+        a.name                                                      AS "artistName",
+        a.slug                                                      AS "artistSlug",
+        (s_end.spotify_streams - s_start.spotify_streams)::bigint  AS "weekStreams",
+        s_end.spotify_streams::bigint                               AS "totalStreams",
+        ROUND(
+          (s_end.spotify_streams - s_start.spotify_streams)::numeric
+          / GREATEST(
+              (s_end.snapshot_date - s_start.snapshot_date),
+              1
+            )
+        )::bigint                                                   AS "dailyAverage"
+      ${baseQuery}
+      ORDER BY "weekStreams" DESC
+      LIMIT  ${limit}
+      OFFSET ${offset}
+    `),
+
+      this.db.execute(sql`
+      SELECT COUNT(*)::int AS total
+      ${baseQuery}
+    `),
+    ]);
+
+    return {
+      data: result.rows as WeeklyReportEntry[],
+      total: (countResult.rows[0] as any).total ?? 0,
     };
   }
 }
