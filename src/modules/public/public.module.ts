@@ -35,6 +35,7 @@ import { RankingsController } from './ranking/rankings.controller';
 import { AlbumsService } from './albums/albums.service';
 import { AlbumsRepository } from './albums/albums.repository';
 import { AlbumsController } from './albums/albums.controller';
+import { MilestoneRepository } from './milestone/milestone.repository';
 
 @Module({
   imports: [CacheModule],
@@ -66,6 +67,7 @@ import { AlbumsController } from './albums/albums.controller';
     AskDataService,
     AskRepository,
     MilestonesService,
+    MilestoneRepository,
     AlbumsService,
     AlbumsRepository,
   ],

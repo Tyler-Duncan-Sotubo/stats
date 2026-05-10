@@ -11,8 +11,6 @@ import {
   MilestonesService,
   ARTIST_TIERS,
   SONG_TIERS,
-  WeeklyReportType,
-  WEEKLY_REPORT_TYPES,
 } from './milestones.service';
 
 @Controller('public/milestones')
@@ -56,28 +54,68 @@ export class MilestonesController {
     });
   }
 
-  @Get('weekly/:type/:weekStart')
-  getWeeklyReport(
-    @Param('type') type: string,
-    @Param('weekStart') weekStart: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  @Get('recent')
+  async getRecentMilestones(
     @Query('isAfrobeats') isAfrobeats?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    if (!WEEKLY_REPORT_TYPES.includes(type as WeeklyReportType))
-      throw new BadRequestException(`Invalid report type: ${type}`);
-
-    // Validate weekStart is a Monday (or adjust to nearest)
-    const date = new Date(weekStart);
-    if (isNaN(date.getTime()))
-      throw new BadRequestException('Invalid weekStart date');
-
-    return this.milestonesService.getWeeklyReport({
-      type: type as WeeklyReportType,
-      weekStart,
-      isAfrobeats: isAfrobeats === 'true' ? true : undefined,
-      page,
-      limit: Math.min(limit, 100),
+    return this.milestonesService.getRecentMilestones({
+      isAfrobeats:
+        isAfrobeats !== undefined ? isAfrobeats === 'true' : undefined,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 20,
     });
+  }
+
+  @Get('timeline/:artistSlug')
+  async getArtistTimeline(@Param('artistSlug') artistSlug: string) {
+    return this.milestonesService.getArtistMilestoneTimeline(artistSlug);
+  }
+
+  @Get('facts/:artistSlug/streams/:threshold')
+  async getArtistStreamFact(
+    @Param('artistSlug') artistSlug: string,
+    @Param('threshold') threshold: string,
+  ) {
+    return this.milestonesService.getMilestoneFact({
+      artistSlug,
+      metric: 'spotify_streams',
+      threshold: Number(threshold),
+    });
+  }
+
+  @Get('facts/:artistSlug/listeners/:threshold')
+  async getArtistListenerFact(
+    @Param('artistSlug') artistSlug: string,
+    @Param('threshold') threshold: string,
+  ) {
+    return this.milestonesService.getMilestoneFact({
+      artistSlug,
+      metric: 'monthly_listeners',
+      threshold: Number(threshold),
+    });
+  }
+
+  @Get('facts/:artistSlug/songs/:songSlug/streams/:threshold')
+  async getSongStreamFact(
+    @Param('artistSlug') artistSlug: string,
+    @Param('songSlug') songSlug: string,
+    @Param('threshold') threshold: string,
+  ) {
+    return this.milestonesService.getMilestoneFact({
+      artistSlug,
+      metric: 'spotify_streams',
+      threshold: Number(threshold),
+      songSlug,
+    });
+  }
+
+  @Get('facts/indexable')
+  async getIndexableFacts(
+    @Query('limit', new DefaultValuePipe(5000), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+  ) {
+    return this.milestonesService.getIndexableFacts(limit, offset);
   }
 }

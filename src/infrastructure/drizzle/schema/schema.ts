@@ -666,9 +666,66 @@ export const askQuestions = pgTable(
   ],
 );
 
+export const milestoneEvents = pgTable(
+  'milestone_events',
+  {
+    id: uuid('id').primaryKey().$defaultFn(defaultId),
+
+    artistId: uuid('artist_id').references(() => artists.id, {
+      onDelete: 'cascade',
+    }),
+    songId: uuid('song_id').references(() => songs.id, {
+      onDelete: 'cascade',
+    }),
+
+    metric: text('metric').notNull(), // 'spotify_streams' | 'monthly_listeners'
+    threshold: bigint('threshold', { mode: 'number' }).notNull(),
+    crossedAt: date('crossed_at').notNull(),
+    streamValueAtCrossing: bigint('stream_value_at_crossing', {
+      mode: 'number',
+    }),
+
+    // notification tracking
+    notifiedAt: timestamp('notified_at'),
+    tweetId: text('tweet_id'),
+    tweetText: text('tweet_text'),
+    isAfrobeats: boolean('is_afrobeats').notNull().default(false),
+
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    // never fire twice for same artist/song/metric/threshold
+    uniqueIndex('milestone_events_unique_idx').on(
+      t.artistId,
+      t.songId,
+      t.metric,
+      t.threshold,
+    ),
+    index('milestone_events_artist_idx').on(t.artistId),
+    index('milestone_events_song_idx').on(t.songId),
+    index('milestone_events_crossed_at_idx').on(t.crossedAt),
+    index('milestone_events_notified_idx').on(t.notifiedAt),
+    index('milestone_events_is_afrobeats_idx').on(t.isAfrobeats),
+  ],
+);
+
 /* ============================================================================
    RELATIONS
 ============================================================================ */
+
+export const milestoneEventsRelations = relations(
+  milestoneEvents,
+  ({ one }) => ({
+    artist: one(artists, {
+      fields: [milestoneEvents.artistId],
+      references: [artists.id],
+    }),
+    song: one(songs, {
+      fields: [milestoneEvents.songId],
+      references: [songs.id],
+    }),
+  }),
+);
 
 export const artistsRelations = relations(artists, ({ one, many }) => ({
   mergedInto: one(artists, {

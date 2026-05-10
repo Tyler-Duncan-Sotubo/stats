@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 // milestones.service.ts
 import { Injectable } from '@nestjs/common';
 import { CacheService } from 'src/infrastructure/cache/cache.service';
@@ -5,6 +6,12 @@ import { ArtistsRepository } from '../artists/artists.repository';
 import { SongsRepository } from '../songs/songs.repository';
 import type { MilestoneArtistEntry } from '../artists/artists.repository';
 import type { MilestoneSongEntry } from '../songs/songs.repository';
+import {
+  ArtistMilestoneTimelineEntry,
+  MilestoneFact,
+  MilestoneRepository,
+  RecentMilestone,
+} from './milestone.repository';
 
 export const ARTIST_TIERS: Record<string, number> = {
   '500-million-streams': 500_000_000,
@@ -81,6 +88,7 @@ export class MilestonesService {
     private readonly artistsRepository: ArtistsRepository,
     private readonly songsRepository: SongsRepository,
     private readonly cacheService: CacheService,
+    private readonly milestoneRepository: MilestoneRepository, // add
   ) {}
 
   async getArtistMilestone(params: {
@@ -215,69 +223,93 @@ export class MilestonesService {
       },
     );
   }
-
-  // In MilestonesService
-
-  async getWeeklyReport(params: {
-    type: WeeklyReportType;
-    weekStart: string; // ISO date "2025-04-23"
+  async getRecentMilestones(params: {
     isAfrobeats?: boolean;
     page: number;
     limit: number;
-  }): Promise<WeeklyReportResponse> {
-    const { type, weekStart, isAfrobeats, page, limit } = params;
+  }): Promise<{
+    data: RecentMilestone[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const { isAfrobeats, page, limit } = params;
+    const offset = (page - 1) * limit;
 
-    const start = new Date(weekStart);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
+    return this.cacheService.cached(
+      `public:milestones:recent:${isAfrobeats ?? 'all'}:${page}:${limit}`,
+      CacheService.TTL.MEDIUM,
+      async () => {
+        const { data, total } =
+          await this.milestoneRepository.getRecentMilestones({
+            isAfrobeats,
+            limit,
+            offset,
+          });
 
-    const weekEnd = end.toISOString().split('T')[0];
-    const weekLabel = this.formatWeekLabel(start, end);
-
-    const cacheKey = `public:weekly:${type}:${weekStart}:${isAfrobeats ? 'afrobeats' : 'global'}:${page}:${limit}`;
-
-    // Current week: short TTL (1hr). Past weeks: very long TTL (7 days)
-    const isCurrentWeek = this.isCurrentWeek(start);
-    const ttl = isCurrentWeek
-      ? CacheService.TTL.LONG
-      : CacheService.TTL.EXTENDED;
-
-    return this.cacheService.cached(cacheKey, ttl, async () => {
-      const offset = (page - 1) * limit;
-
-      const { data, total } = await this.songsRepository.getWeeklyMostStreamed({
-        weekStart,
-        weekEnd,
-        isAfrobeats,
-        limit,
-        offset,
-      });
-
-      return {
-        data: data.map((row, i) => ({ ...row, rank: offset + i + 1 })),
-        meta: {
-          weekStart,
-          weekEnd,
-          weekLabel,
-          type,
-          isAfrobeats: !!isAfrobeats,
-          total,
-        },
-      };
-    });
+        return {
+          data,
+          meta: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+        };
+      },
+    );
   }
 
-  private formatWeekLabel(start: Date, end: Date): string {
-    const fmt = (d: Date) =>
-      d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-    return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
+  async getArtistMilestoneTimeline(
+    artistSlug: string,
+  ): Promise<ArtistMilestoneTimelineEntry[]> {
+    return this.cacheService.cached(
+      `public:milestones:timeline:${artistSlug}`,
+      CacheService.TTL.LONG,
+      () => this.milestoneRepository.getArtistMilestoneTimeline(artistSlug),
+    );
+  }
+  async getMilestoneFact(params: {
+    artistSlug: string;
+    metric: string;
+    threshold: number;
+    songSlug?: string;
+  }): Promise<MilestoneFact | null> {
+    const { artistSlug, metric, threshold, songSlug } = params;
+
+    const cacheKey = `public:milestones:fact:${artistSlug}:${metric}:${threshold}:${songSlug ?? 'artist'}`;
+
+    return this.cacheService.cached(
+      cacheKey,
+      CacheService.TTL.LONG,
+      async () => {
+        const fact = await this.milestoneRepository.getMilestoneFact({
+          artistSlug,
+          metric,
+          threshold,
+          songSlug,
+        });
+
+        return (fact ?? null) as MilestoneFact | null;
+      },
+    );
   }
 
-  private isCurrentWeek(start: Date): boolean {
-    const now = new Date();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - now.getDay() + 1);
-    monday.setHours(0, 0, 0, 0);
-    return start >= monday;
+  async getIndexableFacts(
+    limit: number,
+    offset: number,
+  ): Promise<
+    {
+      slug: string;
+      updatedAt: string;
+      artistSlug: string;
+      metric: string;
+      threshold: number;
+      songSlug: string | null;
+    }[]
+  > {
+    return this.cacheService.cached(
+      `public:milestones:facts:indexable:${limit}:${offset}`,
+      CacheService.TTL.LONG,
+      () => this.milestoneRepository.getIndexableFacts(limit, offset),
+    );
   }
 }
