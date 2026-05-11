@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-redundant-type-constituents */
 import { Injectable, Inject } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DRIZZLE } from 'src/infrastructure/drizzle/drizzle.module';
@@ -63,66 +62,83 @@ export class MilestoneRepository {
 
   async getRecentMilestones(params: {
     isAfrobeats?: boolean;
+    metric?: string;
+    q?: string;
     limit: number;
     offset: number;
   }): Promise<{ data: RecentMilestone[]; total: number }> {
-    const { isAfrobeats, limit, offset } = params;
+    const { isAfrobeats, metric, q, limit, offset } = params;
+    console.log({ isAfrobeats, metric, q, limit, offset });
 
     const afrobeatsFragment =
       isAfrobeats !== undefined
         ? sql` AND me.is_afrobeats = ${isAfrobeats}`
         : sql``;
 
+    const metricFragment = metric ? sql` AND me.metric = ${metric}` : sql``;
+
+    const searchFragment = q
+      ? sql` AND (a.name ILIKE ${'%' + q + '%'} OR s.title ILIKE ${'%' + q + '%'})`
+      : sql``;
+
     const [dataResult, countResult] = await Promise.all([
       this.db.execute(sql`
-        SELECT *
-        FROM (
-          SELECT DISTINCT ON (
-            COALESCE(me.song_id::text, me.artist_id::text)
-          )
-            me.id,
-            me.metric,
-            me.threshold::bigint                      AS "threshold",
-            me.crossed_at                             AS "crossedAt",
-            me.is_afrobeats                           AS "isAfrobeats",
-            me.stream_value_at_crossing::bigint       AS "streamValue",
-            a.id                                      AS "artistId",
-            a.name                                    AS "artistName",
-            a.slug                                    AS "artistSlug",
-            a.image_url                               AS "artistImageUrl",
-            s.id                                      AS "songId",
-            s.title                                   AS "songTitle",
-            s.slug                                    AS "songSlug",
-            s.image_url                               AS "songImageUrl"
-          FROM milestone_events me
-          LEFT JOIN artists a ON a.id = me.artist_id
-          LEFT JOIN songs s ON s.id = me.song_id
-          WHERE 1=1
-            ${afrobeatsFragment}
-          ORDER BY
-            COALESCE(me.song_id::text, me.artist_id::text),
-            me.threshold DESC,
-            me.crossed_at DESC
-        ) deduped
-        ORDER BY "crossedAt" DESC, "threshold" DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `),
+      SELECT *
+      FROM (
+        SELECT DISTINCT ON (
+          COALESCE(me.song_id::text, me.artist_id::text)
+        )
+          me.id,
+          me.metric,
+          me.threshold::bigint                      AS "threshold",
+          me.crossed_at                             AS "crossedAt",
+          me.is_afrobeats                           AS "isAfrobeats",
+          me.stream_value_at_crossing::bigint       AS "streamValue",
+          a.id                                      AS "artistId",
+          a.name                                    AS "artistName",
+          a.slug                                    AS "artistSlug",
+          a.image_url                               AS "artistImageUrl",
+          s.id                                      AS "songId",
+          s.title                                   AS "songTitle",
+          s.slug                                    AS "songSlug",
+          s.image_url                               AS "songImageUrl"
+        FROM milestone_events me
+        LEFT JOIN artists a ON a.id = me.artist_id
+        LEFT JOIN songs s ON s.id = me.song_id
+        WHERE 1=1
+          ${afrobeatsFragment}
+          ${metricFragment}
+          ${searchFragment}
+        ORDER BY
+          COALESCE(me.song_id::text, me.artist_id::text),
+          me.threshold DESC,
+          me.crossed_at DESC
+      ) deduped
+      ORDER BY "crossedAt" DESC, "threshold" DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `),
       this.db.execute(sql`
-        SELECT COUNT(*)::int AS total
-        FROM (
-          SELECT DISTINCT ON (
-            COALESCE(me.song_id::text, me.artist_id::text)
-          )
-            me.id
-          FROM milestone_events me
-          WHERE 1=1
-            ${afrobeatsFragment}
-          ORDER BY
-            COALESCE(me.song_id::text, me.artist_id::text),
-            me.threshold DESC
-        ) deduped
-      `),
+      SELECT COUNT(*)::int AS total
+      FROM (
+        SELECT DISTINCT ON (
+          COALESCE(me.song_id::text, me.artist_id::text)
+        )
+          me.id
+        FROM milestone_events me
+        LEFT JOIN artists a ON a.id = me.artist_id
+        LEFT JOIN songs s ON s.id = me.song_id
+        WHERE 1=1
+          ${afrobeatsFragment}
+          ${metricFragment}
+          ${searchFragment}
+        ORDER BY
+          COALESCE(me.song_id::text, me.artist_id::text),
+          me.threshold DESC
+      ) deduped
+    `),
     ]);
+
+    console.log({ dataResult, countResult });
 
     return {
       data: dataResult.rows as RecentMilestone[],

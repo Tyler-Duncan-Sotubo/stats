@@ -223,28 +223,34 @@ export class MilestonesService {
       },
     );
   }
+
   async getRecentMilestones(params: {
     isAfrobeats?: boolean;
+    metric?: string;
+    q?: string;
     page: number;
     limit: number;
   }): Promise<{
     data: RecentMilestone[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
-    const { isAfrobeats, page, limit } = params;
+    const { isAfrobeats, metric, page, limit } = params;
     const offset = (page - 1) * limit;
 
     return this.cacheService.cached(
-      `public:milestones:recent:${isAfrobeats ?? 'all'}:${page}:${limit}`,
+      `public:milestones:facts:${isAfrobeats ?? 'all'}:${metric ?? 'all'}:${page}:${limit}`,
       CacheService.TTL.MEDIUM,
       async () => {
         const { data, total } =
           await this.milestoneRepository.getRecentMilestones({
             isAfrobeats,
+            metric,
+            q: params.q,
             limit,
             offset,
           });
 
+        console.log(data);
         return {
           data,
           meta: {

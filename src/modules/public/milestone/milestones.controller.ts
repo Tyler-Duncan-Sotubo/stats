@@ -111,6 +111,28 @@ export class MilestonesController {
     });
   }
 
+  @Get('facts')
+  async getMilestoneFacts(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('isAfrobeats') isAfrobeats?: string,
+    @Query('metric') metric?: string,
+    @Query('q') q?: string,
+  ) {
+    return this.milestonesService.getRecentMilestones({
+      isAfrobeats:
+        isAfrobeats === 'true'
+          ? true
+          : isAfrobeats === 'false'
+            ? false
+            : undefined,
+      metric: metric || undefined,
+      q: q || undefined,
+      page,
+      limit,
+    });
+  }
+
   @Get('facts/indexable')
   async getIndexableFacts(
     @Query('limit', new DefaultValuePipe(5000), ParseIntPipe) limit: number,
