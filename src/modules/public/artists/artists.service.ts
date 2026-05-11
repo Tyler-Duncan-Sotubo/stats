@@ -17,6 +17,7 @@ export interface BrowseArtistsParams {
   country?: string;
   isAfrobeats?: boolean;
   sortBy?: 'name' | 'totalStreams' | 'monthlyListeners';
+  q?: string; // add this
 }
 
 export interface BrowseArtistsResponse {
@@ -116,6 +117,7 @@ export class ArtistsService {
           country: params.country,
           isAfrobeats: params.isAfrobeats,
           sortBy: params.sortBy,
+          q: params.q,
         });
 
         return {

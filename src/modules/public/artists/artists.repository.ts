@@ -313,6 +313,7 @@ export class ArtistsRepository {
     country?: string;
     isAfrobeats?: boolean;
     sortBy?: 'name' | 'totalStreams' | 'monthlyListeners';
+    q?: string;
   }): Promise<BrowseArtistsResult> {
     const {
       limit,
@@ -321,15 +322,21 @@ export class ArtistsRepository {
       country,
       isAfrobeats,
       sortBy = 'totalStreams',
+      q,
     } = params;
 
     let letterFragment = sql``;
     let countryFragment = sql``;
     let afrobeatsFragment = sql``;
+    let searchFragment = sql``;
 
-    if (letter) {
+    if (q) {
+      // search takes priority over letter filter
+      searchFragment = sql` AND a.name ILIKE ${'%' + q + '%'}`;
+    } else if (letter) {
       letterFragment = sql` AND UPPER(a.name) LIKE ${letter.toUpperCase() + '%'}`;
     }
+
     if (country) {
       countryFragment = sql` AND a.origin_country = ${country.toUpperCase()}`;
     }
@@ -337,8 +344,9 @@ export class ArtistsRepository {
       afrobeatsFragment = sql` AND a.is_afrobeats = ${isAfrobeats}`;
     }
 
-    const orderBy =
-      sortBy === 'name'
+    const orderBy = q
+      ? sql`s.total_streams DESC NULLS LAST` // always sort by streams when searching
+      : sortBy === 'name'
         ? sql`a.name ASC`
         : sortBy === 'monthlyListeners'
           ? sql`ml.monthly_listeners DESC NULLS LAST`
@@ -359,6 +367,7 @@ export class ArtistsRepository {
       LEFT JOIN artist_stream_summary s ON s.artist_id = a.id
       LEFT JOIN artist_monthly_listener_summary ml ON ml.artist_id = a.id
       WHERE a.entity_status = 'canonical'
+        ${searchFragment}
         ${letterFragment}
         ${countryFragment}
         ${afrobeatsFragment}
@@ -369,6 +378,7 @@ export class ArtistsRepository {
       SELECT COUNT(*)::int AS total
       FROM artists a
       WHERE a.entity_status = 'canonical'
+        ${searchFragment}
         ${letterFragment}
         ${countryFragment}
         ${afrobeatsFragment}

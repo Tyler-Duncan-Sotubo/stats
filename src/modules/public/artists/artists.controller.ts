@@ -24,6 +24,7 @@ export class ArtistsController {
     @Query('country') country?: string,
     @Query('isAfrobeats') isAfrobeats?: string,
     @Query('sortBy') sortBy?: 'name' | 'totalStreams' | 'monthlyListeners',
+    @Query('q') q?: string,
   ) {
     return this.artistsService.browse({
       page: page ? Number(page) : undefined,
@@ -33,6 +34,7 @@ export class ArtistsController {
       isAfrobeats:
         isAfrobeats !== undefined ? isAfrobeats === 'true' : undefined,
       sortBy,
+      q: q || undefined,
     });
   }
 
