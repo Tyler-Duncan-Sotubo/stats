@@ -9,7 +9,13 @@ import {
   DefaultValuePipe,
   ParseIntPipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import {
   MilestonesService,
@@ -17,6 +23,8 @@ import {
   SONG_TIERS,
 } from 'src/modules/public/milestone/milestones.service';
 
+@ApiTags('Milestones')
+@ApiBearerAuth('api-key')
 @Controller('v1/milestones')
 @UseGuards(ApiKeyGuard)
 export class V1MilestonesController {

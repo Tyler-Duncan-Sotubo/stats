@@ -7,10 +7,17 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import { TrendingService } from 'src/modules/public/trending/trending.service';
 
+@ApiTags('Trending')
+@ApiBearerAuth('api-key')
 @Controller('v1/trending')
 @UseGuards(ApiKeyGuard)
 export class V1TrendingController {

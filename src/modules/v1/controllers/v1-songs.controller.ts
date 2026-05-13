@@ -1,10 +1,18 @@
 // src/modules/v1/controllers/v1-songs.controller.ts
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import { ArtistsService } from 'src/modules/public/artists/artists.service';
 import { SongsService } from 'src/modules/public/songs/songs.service';
 
+@ApiTags('Songs')
+@ApiBearerAuth('api-key')
 @Controller('v1/songs')
 @UseGuards(ApiKeyGuard)
 export class V1SongsController {

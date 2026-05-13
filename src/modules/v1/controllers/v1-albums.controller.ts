@@ -1,9 +1,17 @@
 // src/modules/v1/controllers/v1-albums.controller.ts
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import { AlbumsService } from 'src/modules/public/albums/albums.service';
 
+@ApiTags('Albums')
+@ApiBearerAuth('api-key')
 @Controller('v1/albums')
 @UseGuards(ApiKeyGuard)
 export class V1AlbumsController {

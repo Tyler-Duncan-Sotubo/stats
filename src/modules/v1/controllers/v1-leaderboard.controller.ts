@@ -7,10 +7,17 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import { LeaderboardService } from 'src/modules/public/leaderboard/leaderboard.service';
 
+@ApiTags('Leaderboard')
+@ApiBearerAuth('api-key')
 @Controller('v1/leaderboard')
 @UseGuards(ApiKeyGuard)
 export class V1LeaderboardController {

@@ -8,10 +8,18 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import { ChartsService } from 'src/modules/public/charts/charts.service';
 
+@ApiTags('Charts')
+@ApiBearerAuth('api-key')
 @Controller('v1/charts')
 @UseGuards(ApiKeyGuard)
 export class V1ChartsController {

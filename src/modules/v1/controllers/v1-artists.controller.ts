@@ -2,8 +2,16 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiKeyGuard } from 'src/modules/api-keys/guards/api-key.guard';
 import { ArtistsService } from 'src/modules/public/artists/artists.service';
-import { ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiQuery,
+  ApiParam,
+  ApiBearerAuth,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('Artists')
+@ApiBearerAuth('api-key')
 @Controller('v1/artists')
 @UseGuards(ApiKeyGuard)
 export class V1ArtistsController {
