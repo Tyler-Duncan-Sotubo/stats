@@ -250,7 +250,6 @@ export class MilestonesService {
             offset,
           });
 
-        console.log(data);
         return {
           data,
           meta: {

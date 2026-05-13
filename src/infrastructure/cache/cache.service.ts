@@ -58,6 +58,14 @@ export class CacheService {
     return counts.reduce((sum, n) => sum + n, 0);
   }
 
+  async increment(key: string): Promise<number> {
+    return this.redis.incr(key);
+  }
+
+  async expire(key: string, seconds: number): Promise<void> {
+    await this.redis.expire(key, seconds);
+  }
+
   // ── TTL presets — use these across all services ───────────────────────
 
   static readonly TTL = {

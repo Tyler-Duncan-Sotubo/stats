@@ -14,6 +14,8 @@ import { AlbumsModule } from './modules/albums/albums.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PublicModule } from './modules/public/public.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { V1Module } from './modules/v1/v1.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
     RecordsModule,
     AlbumsModule,
     PublicModule,
+    ApiKeysModule,
+    V1Module,
   ],
 })
 export class AppModule {}

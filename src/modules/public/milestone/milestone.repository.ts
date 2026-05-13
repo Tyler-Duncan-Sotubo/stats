@@ -68,7 +68,6 @@ export class MilestoneRepository {
     offset: number;
   }): Promise<{ data: RecentMilestone[]; total: number }> {
     const { isAfrobeats, metric, q, limit, offset } = params;
-    console.log({ isAfrobeats, metric, q, limit, offset });
 
     const afrobeatsFragment =
       isAfrobeats !== undefined
@@ -137,8 +136,6 @@ export class MilestoneRepository {
       ) deduped
     `),
     ]);
-
-    console.log({ dataResult, countResult });
 
     return {
       data: dataResult.rows as RecentMilestone[],

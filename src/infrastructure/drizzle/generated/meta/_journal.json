@@ -43,6 +43,13 @@
       "when": 1778668718223,
       "tag": "0005_chunky_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778691543273,
+      "tag": "0006_crazy_baron_zemo",
+      "breakpoints": true
     }
   ]
 }
