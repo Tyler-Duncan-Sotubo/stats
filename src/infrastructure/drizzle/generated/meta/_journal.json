@@ -36,6 +36,13 @@
       "when": 1778401919327,
       "tag": "0004_busy_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778668718223,
+      "tag": "0005_chunky_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

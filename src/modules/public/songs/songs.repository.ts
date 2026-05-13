@@ -10,6 +10,7 @@ export interface PublicSong {
   title: string;
   slug: string | null;
   imageUrl: string | null;
+  tooxclusiveUrl: string | null;
   spotifyTrackId: string | null;
   isAfrobeats: boolean;
   explicit: boolean;
@@ -83,6 +84,7 @@ export class SongsRepository {
       sg.title,
       sg.slug,
       sg.image_url                          AS "imageUrl",
+      sg.tooxclusive_url                    AS "tooxclusiveUrl",
       sg.spotify_track_id                   AS "spotifyTrackId",
       sg.is_afrobeats                       AS "isAfrobeats",
       sg.explicit,

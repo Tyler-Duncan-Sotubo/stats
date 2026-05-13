@@ -279,7 +279,7 @@ export const songs = pgTable(
     explicit: boolean('explicit').notNull().default(false),
     isAfrobeats: boolean('is_afrobeats').notNull().default(false),
     imageUrl: text('image_url'),
-
+    tooxclusiveUrl: text('tooxclusive_url'),
     // identity / lifecycle
     entityStatus: text('entity_status').notNull().default('canonical'),
     sourceOfTruth: text('source_of_truth'),

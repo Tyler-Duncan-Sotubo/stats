@@ -46,6 +46,10 @@ export class CreateSongDto {
   imageUrl?: string;
 
   @IsOptional()
+  @IsString()
+  tooxclusiveUrl?: string;
+
+  @IsOptional()
   @IsIn(['canonical', 'provisional', 'merged', 'rejected'])
   entityStatus?: string;
 

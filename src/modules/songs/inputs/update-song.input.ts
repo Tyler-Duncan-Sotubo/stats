@@ -10,6 +10,7 @@ export interface UpdateSongInput {
   explicit?: boolean;
   isAfrobeats?: boolean;
   imageUrl?: string;
+  tooxclusiveUrl?: string;
   entityStatus?: string;
   sourceOfTruth?: string;
   needsReview?: boolean;
