@@ -10,9 +10,11 @@ export class ApiKeysPublicController {
   @Post('request')
   @HttpCode(HttpStatus.ACCEPTED)
   async request(@Body() dto: RequestApiKeyDto) {
-    await this.apiKeysService.requestKey(dto);
+    const created = await this.apiKeysService.requestKey(dto);
     return {
-      message: 'Your API key has been sent to your email address.',
+      key: created.key,
+      tier: created.tier,
+      dailyLimit: created.dailyLimit,
     };
   }
 }

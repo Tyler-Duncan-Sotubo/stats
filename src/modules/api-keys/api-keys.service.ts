@@ -47,7 +47,7 @@ export class ApiKeysService {
   // ── Create ────────────────────────────────────────────────────────────────
 
   // add to api-keys.service.ts
-  async requestKey(dto: RequestApiKeyDto): Promise<void> {
+  async requestKey(dto: RequestApiKeyDto): Promise<CreatedApiKey> {
     const created = await this.create({
       name: dto.name,
       email: dto.email,
@@ -55,17 +55,7 @@ export class ApiKeysService {
       tier: 'free',
     });
 
-    console.log(
-      `API key requested: ${created.email} (${created.keyPrefix}...)`,
-    );
-
-    // email the raw key — next step (Resend)
-    // await this.emailService.sendApiKey({
-    //   to: created.email,
-    //   name: created.name,
-    //   key: created.key,
-    //   dailyLimit: created.dailyLimit,
-    // });
+    return created;
   }
 
   async create(dto: CreateApiKeyDto): Promise<CreatedApiKey> {
