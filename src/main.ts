@@ -86,7 +86,6 @@ async function bootstrap() {
     )
     .setLicense('Proprietary', 'https://tooxclusive.com/terms')
     .addServer('https://api.tooxclusive.com', 'Production')
-    .addServer('http://localhost:8000', 'Local')
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
