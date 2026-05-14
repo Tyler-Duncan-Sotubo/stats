@@ -24,8 +24,10 @@ export function getDb() {
         const pool = new Pool({
           connectionString: config.getOrThrow('DATABASE_URL'),
           max: 2,
-          idleTimeoutMillis: 300000, // 5 minutes — keep connections alive longer
-          connectionTimeoutMillis: 10000, // more time for cold boot
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 15000,
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 10000,
         });
 
         pool.on('error', (err) => {
