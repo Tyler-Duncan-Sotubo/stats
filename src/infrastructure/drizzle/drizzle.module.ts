@@ -24,8 +24,15 @@ export function getDb() {
         const pool = new Pool({
           connectionString: config.getOrThrow('DATABASE_URL'),
           max: 2,
-          idleTimeoutMillis: 10000,
-          connectionTimeoutMillis: 5000,
+          idleTimeoutMillis: 300000, // 5 minutes — keep connections alive longer
+          connectionTimeoutMillis: 10000, // more time for cold boot
+        });
+
+        pool.on('error', (err) => {
+          console.error(
+            'Pool client error — removing stale connection:',
+            err.message,
+          );
         });
 
         _db = drizzle(pool, { schema });
