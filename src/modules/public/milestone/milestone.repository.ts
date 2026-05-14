@@ -282,7 +282,7 @@ export class MilestoneRepository {
     JOIN artists a ON a.id = me.artist_id
     LEFT JOIN songs s ON s.id = me.song_id
     WHERE a.slug IS NOT NULL
-    ORDER BY me.created_at DESC
+    ORDER BY me.created_at ASC
     LIMIT ${limit} OFFSET ${offset}
   `);
 
