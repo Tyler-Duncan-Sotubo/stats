@@ -34,7 +34,22 @@ export class CacheService {
     if (hit !== null) return hit;
 
     const result = await fetcher();
-    await this.set(key, result, ttlSeconds);
+
+    // Never cache empty results
+    const isEmpty =
+      result === null ||
+      result === undefined ||
+      (Array.isArray(result) && result.length === 0) ||
+      (typeof result === 'object' &&
+        result !== null &&
+        'data' in result &&
+        Array.isArray((result as any).data) &&
+        (result as any).data.length === 0);
+
+    if (!isEmpty) {
+      await this.set(key, result, ttlSeconds);
+    }
+
     return result;
   }
 
