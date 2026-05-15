@@ -24,10 +24,9 @@ export function getDb() {
         const pool = new Pool({
           connectionString: config.getOrThrow('DATABASE_URL'),
           max: 2,
-          idleTimeoutMillis: 5000,
+          idleTimeoutMillis: 5000, // release connections after 5s idle
           connectionTimeoutMillis: 15000,
-          keepAlive: true,
-          keepAliveInitialDelayMillis: 10000,
+          allowExitOnIdle: true, // allow pool to fully drain
         });
 
         pool.on('error', (err) => {
