@@ -207,54 +207,54 @@ export class LeaderboardRepository {
     }));
   }
 
-  async getArtistRankContext(artistId: string): Promise<{
-    streamRank: number | null;
-    listenerRank: number | null;
-    dailyStreamsGain: number | null;
-    dailyListenersChange: number | null;
-    artistAbove: { name: string; slug: string } | null;
-    artistBelow: { name: string; slug: string } | null;
-  }> {
-    const result = await this.db.execute(sql`
-    WITH stream_ranked AS (
-      SELECT
-        a.id,
-        a.name,
-        a.slug,
-        ROW_NUMBER() OVER (ORDER BY s.total_streams DESC NULLS LAST)::int AS rank
-      FROM artist_stream_summary s
-      JOIN artists a ON a.id = s.artist_id
-      WHERE a.entity_status = 'canonical'
-    ),
-    target AS (
-      SELECT rank FROM stream_ranked WHERE id = ${artistId}
-    )
+  async getArtistRankContext(artistId: string) {
+    // Get artist's stream rank directly from MV
+    const rankResult = await this.db.execute(sql`
     SELECT
-      sr.id,
-      sr.name,
-      sr.slug,
-      sr.rank,
-      CASE
-        WHEN sr.rank = (SELECT rank FROM target) THEN 'current'
-        WHEN sr.rank = (SELECT rank FROM target) - 1 THEN 'above'
-        WHEN sr.rank = (SELECT rank FROM target) + 1 THEN 'below'
-      END AS position
-    FROM stream_ranked sr
-    WHERE sr.rank BETWEEN (SELECT rank FROM target) - 1 
-                      AND (SELECT rank FROM target) + 1
+      (
+        SELECT COUNT(*)::int + 1
+        FROM artist_stream_summary s2
+        JOIN artists a2 ON a2.id = s2.artist_id
+        WHERE s2.total_streams > s.total_streams
+          AND a2.entity_status = 'canonical'
+      ) AS "streamRank",
+      s.total_streams AS "totalStreams"
+    FROM artist_stream_summary s
+    WHERE s.artist_id = ${artistId}
   `);
 
-    const rows = result.rows as any[];
-    const current = rows.find((r) => r.position === 'current');
-    const above = rows.find((r) => r.position === 'above');
-    const below = rows.find((r) => r.position === 'below');
+    const rankRow = rankResult.rows[0] as any;
+    const streamRank = rankRow?.streamRank ?? null;
 
-    // Get daily change from listener summary (you already store this)
+    // Get artists directly above and below using rank
+    const neighbourResult = await this.db.execute(sql`
+    SELECT
+      a.name,
+      a.slug,
+      s.total_streams,
+      ROW_NUMBER() OVER (ORDER BY s.total_streams DESC NULLS LAST)::int AS rank
+    FROM artist_stream_summary s
+    JOIN artists a ON a.id = s.artist_id
+    WHERE a.entity_status = 'canonical'
+      AND s.total_streams BETWEEN (
+        SELECT total_streams FROM artist_stream_summary WHERE artist_id = ${artistId}
+      ) - 50000000
+      AND (
+        SELECT total_streams FROM artist_stream_summary WHERE artist_id = ${artistId}
+      ) + 50000000
+    ORDER BY s.total_streams DESC
+    LIMIT 10
+  `);
+
+    const neighbours = neighbourResult.rows as any[];
+    const currentIdx = neighbours.findIndex((r) => r.rank === streamRank);
+    const above = currentIdx > 0 ? neighbours[currentIdx - 1] : null;
+    const below =
+      currentIdx < neighbours.length - 1 ? neighbours[currentIdx + 1] : null;
+
+    // Get listener data
     const listenerResult = await this.db.execute(sql`
-    SELECT 
-      global_rank,
-      daily_change,
-      monthly_listeners
+    SELECT global_rank, daily_change
     FROM artist_monthly_listener_summary
     WHERE artist_id = ${artistId}
   `);
@@ -262,9 +262,9 @@ export class LeaderboardRepository {
     const listenerRow = listenerResult.rows[0] as any;
 
     return {
-      streamRank: current?.rank ?? null,
+      streamRank,
       listenerRank: listenerRow?.global_rank ?? null,
-      dailyStreamsGain: null, // needs snapshot delta - see below
+      dailyStreamsGain: null,
       dailyListenersChange: listenerRow?.daily_change
         ? Number(listenerRow.daily_change)
         : null,

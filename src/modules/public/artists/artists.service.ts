@@ -133,9 +133,13 @@ export class ArtistsService {
     );
   }
 
+  // artists.service.ts
   async getArtistSongs(slug: string, limit = 20): Promise<ArtistSongEntry[]> {
-    const res = await this.artistsRepository.getArtistSongs(slug, limit);
-    return res;
+    return this.cacheService.cached(
+      `public:artists:songs:${slug}:${limit}`,
+      CacheService.TTL.LONG,
+      () => this.artistsRepository.getArtistSongs(slug, limit),
+    );
   }
 
   async getArtistHistory(slug: string): Promise<ArtistHistoryPoint[]> {
