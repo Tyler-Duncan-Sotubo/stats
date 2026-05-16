@@ -151,14 +151,14 @@ export class SongsRepository {
     const result = await this.db.execute(sql`
     SELECT
       s.slug,
-      s.created_at          AS "updatedAt",
-      ss.total_spotify_streams AS "totalStreams"
-    FROM songs s
-    INNER JOIN song_stream_summary ss ON ss.song_id = s.id
-    WHERE s.entity_status = 'canonical'
+      s.created_at                      AS "updatedAt",
+      ss.total_spotify_streams          AS "totalStreams"
+    FROM song_stream_summary ss
+    JOIN songs s ON s.id = ss.song_id
+    WHERE ss.total_spotify_streams >= 1000000
+      AND s.entity_status = 'canonical'
       AND s.slug IS NOT NULL
       AND s.merged_into_song_id IS NULL
-      AND ss.total_spotify_streams >= 1000000
     ORDER BY ss.total_spotify_streams DESC
     LIMIT ${limit} OFFSET ${offset}
   `);
@@ -211,9 +211,9 @@ export class SongsRepository {
         PARTITION BY sss.song_id ORDER BY sss.snapshot_date
       ))                                                          AS "growth7d"
     FROM song_stats_snapshots sss
-    JOIN songs s ON s.id = sss.song_id
-    WHERE s.slug = ${slug}
-      AND s.entity_status = 'canonical'
+    WHERE sss.song_id = (
+      SELECT id FROM songs WHERE slug = ${slug} LIMIT 1
+    )
     ORDER BY sss.snapshot_date ASC
     LIMIT 90
   `);

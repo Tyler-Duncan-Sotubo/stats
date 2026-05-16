@@ -48,13 +48,10 @@ export class SongsService {
     );
   }
 
-  async getIndexableSongs(
-    limit: number,
-    offset: number,
-  ): Promise<{ slug: string; updatedAt: string }[]> {
+  async getIndexableSongs(limit: number, offset: number) {
     return this.cacheService.cached(
       `public:songs:indexable:${limit}:${offset}`,
-      CacheService.TTL.MEDIUM,
+      CacheService.TTL.LONG, // 12 hours
       () => this.songsRepository.getIndexableSongs(limit, offset),
     );
   }

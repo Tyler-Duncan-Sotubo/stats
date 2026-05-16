@@ -468,21 +468,23 @@ export class ArtistsRepository {
     return result.rows as ArtistSongEntry[];
   }
 
+  // artists.repository.ts — improve query
   async getArtistHistory(slug: string): Promise<ArtistHistoryPoint[]> {
     const result = await this.db.execute(sql`
     SELECT
-      ass.snapshot_date                                             AS "date",
-      ass.total_streams                                             AS "totalStreams",
-      ass.daily_streams                                             AS "dailyStreams",
+      ass.snapshot_date                                           AS "date",
+      ass.total_streams                                           AS "totalStreams",
+      ass.daily_streams                                           AS "dailyStreams",
       (ass.daily_streams - LAG(ass.daily_streams) OVER (
         PARTITION BY ass.artist_id ORDER BY ass.snapshot_date
-      ))                                                            AS "dailyGrowth",
+      ))                                                          AS "dailyGrowth",
       (ass.total_streams - LAG(ass.total_streams, 7) OVER (
         PARTITION BY ass.artist_id ORDER BY ass.snapshot_date
-      ))                                                            AS "growth7d"
+      ))                                                          AS "growth7d"
     FROM artist_stats_snapshots ass
-    JOIN artists a ON a.id = ass.artist_id
-    WHERE a.slug = ${slug}
+    WHERE ass.artist_id = (
+      SELECT id FROM artists WHERE slug = ${slug} LIMIT 1
+    )
     ORDER BY ass.snapshot_date ASC
     LIMIT 90
   `);
